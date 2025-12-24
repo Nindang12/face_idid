@@ -1,6 +1,6 @@
 """
 Spark Streaming Application cho Face Recognition
-Sử dụng Spark đã cài trên máy host và lưu dữ liệu lên Hadoop HDFS
+Sử dụng Spark đã cài trên máy host và lưu dữ liệu lên MinIO Object Storage
 """
 import os
 import sys
@@ -15,95 +15,64 @@ from app.database import SessionLocal, Customer, Order
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def save_to_hadoop(data, hdfs_path):
+def save_to_minio(data, object_path):
     """
-    Lưu dữ liệu lên Hadoop HDFS
-    Sử dụng hdfs3 hoặc pyarrow để kết nối với HDFS
+    Lưu dữ liệu lên MinIO Object Storage
     """
     try:
-        # Cách 1: Sử dụng hdfs3
-        try:
-            from hdfs3 import HDFileSystem
-            hdfs_host = settings.HDFS_NAMENODE.split('://')[1].split(':')[0]
-            hdfs_port = int(settings.HDFS_NAMENODE.split(':')[-1])
-            
-            hdfs = HDFileSystem(host=hdfs_host, port=hdfs_port)
-            
-            # Tạo thư mục nếu chưa có
-            dir_path = os.path.dirname(hdfs_path)
-            if not hdfs.exists(dir_path):
-                hdfs.mkdir(dir_path)
-            
-            # Lưu dữ liệu
-            with hdfs.open(hdfs_path, 'wb') as f:
-                if isinstance(data, dict):
-                    f.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
-                else:
-                    f.write(str(data).encode('utf-8'))
-            
-            logger.info(f"✅ Data saved to HDFS: {hdfs_path}")
-            return True
-            
-        except ImportError:
-            # Cách 2: Sử dụng pyarrow (nếu hdfs3 không có)
-            try:
-                import pyarrow.fs as pafs
-                filesystem = pafs.HadoopFileSystem.from_uri(settings.HDFS_NAMENODE)
-                
-                # Tạo thư mục nếu chưa có
-                dir_path = os.path.dirname(hdfs_path)
-                try:
-                    file_info = filesystem.get_file_info(dir_path)
-                    if file_info.type != pafs.FileType.Directory:
-                        filesystem.create_dir(dir_path, recursive=True)
-                except:
-                    filesystem.create_dir(dir_path, recursive=True)
-                
-                # Lưu dữ liệu
-                with filesystem.open_output_stream(hdfs_path) as f:
-                    if isinstance(data, dict):
-                        f.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
-                    else:
-                        f.write(str(data).encode('utf-8'))
-                
-                logger.info(f"✅ Data saved to HDFS: {hdfs_path}")
-                return True
-                
-            except ImportError:
-                # Cách 3: Sử dụng subprocess với hdfs command (nếu có Hadoop CLI)
-                import subprocess
-                import tempfile
-                
-                # Tạo file tạm
-                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as tmp_file:
-                    json.dump(data, tmp_file, ensure_ascii=False)
-                    tmp_path = tmp_file.name
-                
-                try:
-                    # Upload lên HDFS
-                    cmd = f"hdfs dfs -mkdir -p {os.path.dirname(hdfs_path)}"
-                    subprocess.run(cmd, shell=True, check=True, capture_output=True)
-                    
-                    cmd = f"hdfs dfs -put {tmp_path} {hdfs_path}"
-                    result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
-                    
-                    logger.info(f"✅ Data saved to HDFS: {hdfs_path}")
-                    return True
-                except subprocess.CalledProcessError as e:
-                    logger.error(f"❌ Failed to save to HDFS using hdfs command: {e.stderr}")
-                    return False
-                finally:
-                    os.unlink(tmp_path)
-                    
+        from minio import Minio
+        from minio.error import S3Error
+        from io import BytesIO
+        
+        # Kết nối với MinIO
+        minio_client = Minio(
+            settings.MINIO_ENDPOINT,
+            access_key=settings.MINIO_ACCESS_KEY,
+            secret_key=settings.MINIO_SECRET_KEY,
+            secure=settings.MINIO_USE_SSL
+        )
+        
+        # Đảm bảo bucket tồn tại
+        if not minio_client.bucket_exists(settings.MINIO_BUCKET_NAME):
+            minio_client.make_bucket(settings.MINIO_BUCKET_NAME)
+            logger.info(f"✅ Created bucket: {settings.MINIO_BUCKET_NAME}")
+        
+        # Chuyển đổi dữ liệu thành bytes
+        if isinstance(data, dict):
+            data_bytes = json.dumps(data, ensure_ascii=False).encode('utf-8')
+        else:
+            data_bytes = str(data).encode('utf-8')
+        
+        data_stream = BytesIO(data_bytes)
+        data_length = len(data_bytes)
+        
+        # Upload lên MinIO
+        minio_client.put_object(
+            settings.MINIO_BUCKET_NAME,
+            object_path,
+            data_stream,
+            length=data_length,
+            content_type='application/json'
+        )
+        
+        logger.info(f"✅ Data saved to MinIO: {settings.MINIO_BUCKET_NAME}/{object_path}")
+        return True
+        
+    except ImportError:
+        logger.error("❌ minio package not installed. Run: pip install minio")
+        return False
+    except S3Error as e:
+        logger.error(f"❌ MinIO S3Error: {e}")
+        return False
     except Exception as e:
-        logger.error(f"❌ Error saving to HDFS: {e}", exc_info=True)
+        logger.error(f"❌ Error saving to MinIO: {e}", exc_info=True)
         return False
 
 def process_with_spark_workers():
     """
-    Xử lý tasks từ Kafka và lưu dữ liệu lên Hadoop HDFS
+    Xử lý tasks từ Kafka và lưu dữ liệu lên MinIO Object Storage
     Sử dụng Kafka Consumer để nhận dữ liệu từ Kafka
-    Sau khi xử lý, lưu kết quả lên HDFS
+    Sau khi xử lý, lưu kết quả lên MinIO
     """
     face_service = FaceRecognitionService()
     
@@ -117,8 +86,8 @@ def process_with_spark_workers():
     )
     
     logger.info(f"Spark Streaming Consumer started. Listening to topic: {settings.KAFKA_TOPIC_FACE_RECOGNITION}")
-    logger.info(f"HDFS Namenode: {settings.HDFS_NAMENODE}")
-    logger.info(f"HDFS Data Directory: {settings.HDFS_DATA_DIR}")
+    logger.info(f"MinIO Endpoint: {settings.MINIO_ENDPOINT}")
+    logger.info(f"MinIO Bucket: {settings.MINIO_BUCKET_NAME}")
     
     from kafka import KafkaProducer
     
@@ -167,18 +136,18 @@ def process_with_spark_workers():
                     'timestamp': datetime.now().isoformat()
                 }
                 
-                # Lưu kết quả lên Hadoop HDFS
+                # Lưu kết quả lên MinIO
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 date_path = datetime.now().strftime('%Y/%m/%d')
-                hdfs_path = f"{settings.HDFS_DATA_DIR}/recognition_results/{date_path}/result_{task_id}_{timestamp}.json"
+                object_path = f"recognition_results/{date_path}/result_{task_id}_{timestamp}.json"
                 
-                logger.info(f"💾 Attempting to save to HDFS: {hdfs_path}")
-                save_success = save_to_hadoop(recognition_result, hdfs_path)
+                logger.info(f"💾 Attempting to save to MinIO: {object_path}")
+                save_success = save_to_minio(recognition_result, object_path)
                 
                 if save_success:
-                    logger.info(f"✅ Successfully saved task {task_id} to HDFS")
+                    logger.info(f"✅ Successfully saved task {task_id} to MinIO")
                 else:
-                    logger.warning(f"⚠️  Failed to save task {task_id} to HDFS, but continuing...")
+                    logger.warning(f"⚠️  Failed to save task {task_id} to MinIO, but continuing...")
                 
                 # Gửi kết quả về Kafka
                 producer.send(settings.KAFKA_TOPIC_RESULTS, value=recognition_result)
@@ -197,11 +166,11 @@ def process_with_spark_workers():
                     'timestamp': datetime.now().isoformat()
                 }
                 
-                # Lưu error lên HDFS
+                # Lưu error lên MinIO
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 date_path = datetime.now().strftime('%Y/%m/%d')
-                hdfs_path = f"{settings.HDFS_DATA_DIR}/errors/{date_path}/error_{task_data.get('task_id', 'unknown')}_{timestamp}.json"
-                save_to_hadoop(error_result, hdfs_path)
+                object_path = f"errors/{date_path}/error_{task_data.get('task_id', 'unknown')}_{timestamp}.json"
+                save_to_minio(error_result, object_path)
                 
                 producer.send(settings.KAFKA_TOPIC_RESULTS, value=error_result)
                 producer.flush()
@@ -218,19 +187,19 @@ if __name__ == "__main__":
     logger.info(f"Kafka: {settings.KAFKA_BOOTSTRAP_SERVERS}")
     logger.info(f"Topic: {settings.KAFKA_TOPIC_FACE_RECOGNITION}")
     logger.info(f"Spark Master: {settings.SPARK_MASTER}")
-    logger.info(f"HDFS Namenode: {settings.HDFS_NAMENODE}")
-    logger.info(f"HDFS Data Dir: {settings.HDFS_DATA_DIR}")
+    logger.info(f"MinIO Endpoint: {settings.MINIO_ENDPOINT}")
+    logger.info(f"MinIO Bucket: {settings.MINIO_BUCKET_NAME}")
     logger.info("=" * 50)
     
-    # Kiểm tra kết nối HDFS
+    # Kiểm tra kết nối MinIO
     try:
-        test_path = f"{settings.HDFS_DATA_DIR}/test_connection.json"
+        test_object_path = "test_connection.json"
         test_data = {"test": True, "timestamp": datetime.now().isoformat()}
-        if save_to_hadoop(test_data, test_path):
-            logger.info("✅ HDFS connection test successful!")
+        if save_to_minio(test_data, test_object_path):
+            logger.info("✅ MinIO connection test successful!")
         else:
-            logger.warning("⚠️  HDFS connection test failed, but continuing...")
+            logger.warning("⚠️  MinIO connection test failed, but continuing...")
     except Exception as e:
-        logger.warning(f"⚠️  Could not test HDFS connection: {e}")
+        logger.warning(f"⚠️  Could not test MinIO connection: {e}")
     
     process_with_spark_workers()

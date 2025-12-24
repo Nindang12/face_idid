@@ -21,13 +21,14 @@ fi
 HOST_IP=${HOST_IP:-192.168.1.7}
 KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-${HOST_IP}:9092}
 SPARK_MASTER=${SPARK_MASTER:-spark://${HOST_IP}:7077}
-HDFS_NAMENODE=${HDFS_NAMENODE:-hdfs://${HOST_IP}:9000}
+MINIO_ENDPOINT=${MINIO_ENDPOINT:-${HOST_IP}:9000}
+MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME:-face-recognition-data}
 
 echo "📊 Configuration:"
 echo "   - Kafka: $KAFKA_BOOTSTRAP_SERVERS"
 echo "   - Spark Master: $SPARK_MASTER"
-echo "   - HDFS Namenode: $HDFS_NAMENODE"
-echo "   - HDFS Data Dir: ${HDFS_DATA_DIR:-/face_recognition/data}"
+echo "   - MinIO Endpoint: $MINIO_ENDPOINT"
+echo "   - MinIO Bucket: $MINIO_BUCKET_NAME"
 echo ""
 
 # Check Kafka connection
@@ -47,7 +48,7 @@ fi
 # Check if required Python packages are installed
 echo "🔍 Checking Python packages..."
 python3 -c "import kafka" 2>/dev/null || { echo "❌ kafka-python not installed. Run: pip install kafka-python"; exit 1; }
-python3 -c "import hdfs3" 2>/dev/null || python3 -c "import pyarrow.fs" 2>/dev/null || echo "⚠️  Warning: hdfs3 or pyarrow not installed. HDFS saving may not work. Run: pip install hdfs3 pyarrow"
+python3 -c "from minio import Minio" 2>/dev/null || { echo "❌ minio not installed. Run: pip install minio"; exit 1; }
 
 echo ""
 echo "🎯 Starting Spark Streaming Worker..."

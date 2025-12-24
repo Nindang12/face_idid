@@ -19,6 +19,9 @@ confluent-kafka==2.8.2
 # Spark
 pyspark==4.0.0
 
+# MinIO (Object Storage)
+minio==7.2.0
+
 # Database
 sqlalchemy==2.0.35
 psycopg2-binary==2.9.9

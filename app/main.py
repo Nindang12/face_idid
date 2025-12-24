@@ -16,6 +16,7 @@ from app.database import init_db, get_db, Branch, Customer, Order, RecognitionLo
 from app.face_recognition_service import face_service
 from app.kafka_producer import producer
 from app.config import settings
+from app.minio_service import minio_service
 
 app = FastAPI(title="Coffee Shop Face Recognition System", version="2.0.0")
 
@@ -28,28 +29,64 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files
+# Không cần mount static files nữa vì dùng MinIO
+# upload_dir chỉ dùng cho temp files
 upload_dir = Path(settings.UPLOAD_DIR)
 upload_dir.mkdir(exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
+
+# Tạo endpoint để serve images từ MinIO
+@app.get("/uploads/{image_path:path}")
+async def get_image_from_minio(image_path: str):
+    """Serve image từ MinIO"""
+    try:
+        # Lấy object path từ MinIO
+        object_path = f"images/{image_path}"
+        image_data = minio_service.download_file(object_path)
+        
+        if image_data is None:
+            raise HTTPException(status_code=404, detail="Image not found")
+        
+        # Xác định content type
+        content_type = "image/jpeg"
+        if image_path.lower().endswith('.png'):
+            content_type = "image/png"
+        elif image_path.lower().endswith('.gif'):
+            content_type = "image/gif"
+        
+        from fastapi.responses import Response
+        return Response(content=image_data, media_type=content_type)
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Error serving image from MinIO: {e}")
+        raise HTTPException(status_code=500, detail="Error loading image")
 
 def get_image_url(face_encoding_path: Optional[str]) -> Optional[str]:
-    """Convert absolute/relative image path in DB to public URL under /uploads"""
+    """Convert MinIO object path to public URL"""
     if not face_encoding_path:
         return None
 
-    # Chuẩn hóa mọi kiểu đường dẫn lưu trong DB về tên file trong thư mục uploads
+    # Nếu là path cũ (local), chuyển sang MinIO path
     path = str(face_encoding_path)
+    
+    # Loại bỏ các prefix cũ
     path = (
         path.replace('/code/app/uploads/', '')
             .replace('/app/uploads/', '')
             .replace('/uploads/', '')
             .replace('uploads/', '')
+            .replace(f'{settings.UPLOAD_DIR}/', '')
     )
 
     if path.startswith('/'):
         path = path[1:]
-
+    
+    # Nếu đã là MinIO path (images/...), giữ nguyên
+    if path.startswith('images/'):
+        object_path = path
+    else:
+        # Chuyển sang MinIO path format
+        object_path = f"images/{path}"
+    
+    # Trả về URL endpoint để serve từ MinIO
     return f"/uploads/{path}" if path else None
 
 # Initialize database
@@ -120,7 +157,7 @@ async def get_branches(db: Session = Depends(get_db)):
 @app.get("/api/branches/{branch_id}")
 async def get_branch(branch_id: int, db: Session = Depends(get_db)):
     """Lấy thông tin chi nhánh"""
-    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    branch = db.query(Branch).filter(Branch.id == branch_id, Branch.is_active == True).first()
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
     return {
@@ -178,52 +215,59 @@ async def register_customer(
     db: Session = Depends(get_db)
 ):
     """Đăng ký khách hàng mới với ảnh khuôn mặt"""
-    # Lưu ảnh tạm để kiểm tra
-    file_extension = Path(image.filename).suffix
-    temp_id = str(uuid.uuid4())
-    temp_image_path = upload_dir / f"temp_{temp_id}{file_extension}"
+    # Đọc ảnh vào memory
+    image_data = await image.read()
+    file_extension = Path(image.filename).suffix or ".jpg"
     
-    with open(temp_image_path, "wb") as buffer:
-        shutil.copyfileobj(image.file, buffer)
+    # Lưu tạm vào local để encode face (face_recognition cần file path)
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
+        temp_file.write(image_data)
+        temp_image_path = temp_file.name
     
-    # Kiểm tra xem có thể encode face không
-    encoding = face_service.encode_face(str(temp_image_path))
-    if encoding is None:
-        os.remove(temp_image_path)
-        raise HTTPException(status_code=400, detail="Không thể nhận diện khuôn mặt trong ảnh")
-    
-    # Lưu vào database để lấy ID thực tế
-    db_customer = Customer(
-        name=name,
-        face_encoding_path=str(temp_image_path),
-        phone=phone,
-        email=email
-    )
-    db.add(db_customer)
-    db.commit()
-    db.refresh(db_customer)
-    
-    # Đổi tên file ảnh với ID thực tế
-    final_image_path = upload_dir / f"{db_customer.id}{file_extension}"
-    if temp_image_path.exists():
-        temp_image_path.rename(final_image_path)
-    
-    # Lưu face encoding với customer_id thực tế
-    face_service.save_face_encoding(str(db_customer.id), name, str(final_image_path))
-    
-    # Cập nhật path trong database (lưu relative path)
-    relative_path = f"{settings.UPLOAD_DIR}/{db_customer.id}{file_extension}"
-    db_customer.face_encoding_path = relative_path
-    db.commit()
-    
-    return {
-        "id": db_customer.id,
-        "name": db_customer.name,
-        "phone": db_customer.phone,
-        "email": db_customer.email,
-        "face_encoding_path": get_image_url(relative_path),
-        "message": "Customer registered successfully"
-    }
+    try:
+        # Kiểm tra xem có thể encode face không
+        encoding = face_service.encode_face(temp_image_path)
+        if encoding is None:
+            raise HTTPException(status_code=400, detail="Không thể nhận diện khuôn mặt trong ảnh")
+        
+        # Lưu vào database để lấy ID thực tế
+        db_customer = Customer(
+            name=name,
+            face_encoding_path="",  # Sẽ cập nhật sau
+            phone=phone,
+            email=email
+        )
+        db.add(db_customer)
+        db.commit()
+        db.refresh(db_customer)
+        
+        # Upload ảnh lên MinIO với ID thực tế
+        minio_object_path = f"images/customer_{db_customer.id}{file_extension}"
+        content_type = f"image/{file_extension[1:]}" if file_extension else "image/jpeg"
+        
+        if not minio_service.upload_file(minio_object_path, image_data, content_type):
+            raise HTTPException(status_code=500, detail="Không thể lưu ảnh lên MinIO")
+        
+        # Lưu face encoding với customer_id thực tế (sử dụng temp file)
+        face_service.save_face_encoding(str(db_customer.id), name, temp_image_path)
+        
+        # Cập nhật path trong database (lưu MinIO object path)
+        db_customer.face_encoding_path = minio_object_path
+        db.commit()
+        
+        return {
+            "id": db_customer.id,
+            "name": db_customer.name,
+            "phone": db_customer.phone,
+            "email": db_customer.email,
+            "face_encoding_path": get_image_url(minio_object_path),
+            "message": "Customer registered successfully"
+        }
+    finally:
+        # Xóa file tạm
+        if os.path.exists(temp_image_path):
+            os.remove(temp_image_path)
 
 @app.get("/api/customers/")
 async def get_customers(db: Session = Depends(get_db)):
@@ -275,33 +319,49 @@ async def update_customer(
     
     # Cập nhật ảnh nếu có
     if image:
-        # Xóa ảnh cũ nếu có
+        # Xóa ảnh cũ từ MinIO nếu có
         if customer.face_encoding_path:
-            old_path = customer.face_encoding_path.replace('/app/uploads/', '').replace('/uploads/', '').replace('uploads/', '')
-            old_image_path = upload_dir / old_path
-            if old_image_path.exists():
-                try:
-                    os.remove(old_image_path)
-                except:
-                    pass
+            # Nếu là MinIO path (images/...), xóa từ MinIO
+            if customer.face_encoding_path.startswith('images/'):
+                minio_service.delete_file(customer.face_encoding_path)
+            # Nếu là path cũ (local), cũng thử xóa từ MinIO
+            else:
+                old_path = customer.face_encoding_path.replace('/app/uploads/', '').replace('/uploads/', '').replace('uploads/', '').replace(f'{settings.UPLOAD_DIR}/', '')
+                minio_object_path = f"images/{old_path}"
+                minio_service.delete_file(minio_object_path)
         
-        # Lưu ảnh mới
-        file_extension = Path(image.filename).suffix
-        new_image_path = upload_dir / f"{customer_id}{file_extension}"
+        # Đọc ảnh mới
+        image_data = await image.read()
+        file_extension = Path(image.filename).suffix or ".jpg"
         
-        with open(new_image_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
+        # Lưu tạm để encode face
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
+            temp_file.write(image_data)
+            temp_image_path = temp_file.name
         
-        # Kiểm tra và encode face
-        encoding = face_service.encode_face(str(new_image_path))
-        if encoding is None:
-            os.remove(new_image_path)
-            raise HTTPException(status_code=400, detail="Không thể nhận diện khuôn mặt trong ảnh")
-        
-        # Lưu face encoding mới
-        face_service.save_face_encoding(str(customer_id), customer.name, str(new_image_path))
-        # Lưu relative path
-        customer.face_encoding_path = f"{settings.UPLOAD_DIR}/{customer_id}{file_extension}"
+        try:
+            # Kiểm tra và encode face
+            encoding = face_service.encode_face(temp_image_path)
+            if encoding is None:
+                raise HTTPException(status_code=400, detail="Không thể nhận diện khuôn mặt trong ảnh")
+            
+            # Upload ảnh mới lên MinIO
+            minio_object_path = f"images/customer_{customer_id}{file_extension}"
+            content_type = f"image/{file_extension[1:]}" if file_extension else "image/jpeg"
+            
+            if not minio_service.upload_file(minio_object_path, image_data, content_type):
+                raise HTTPException(status_code=500, detail="Không thể lưu ảnh lên MinIO")
+            
+            # Lưu face encoding mới
+            face_service.save_face_encoding(str(customer_id), customer.name, temp_image_path)
+            
+            # Cập nhật path trong database (lưu MinIO object path)
+            customer.face_encoding_path = minio_object_path
+        finally:
+            # Xóa file tạm
+            if os.path.exists(temp_image_path):
+                os.remove(temp_image_path)
     
     db.commit()
     db.refresh(customer)
@@ -336,35 +396,41 @@ async def delete_customer(customer_id: int, db: Session = Depends(get_db)):
             db.delete(log)
         logging.getLogger(__name__).info(f"Deleted {len(logs)} recognition logs for customer {customer_id}")
         
-        # Xóa file ảnh nếu có
+        # Xóa file ảnh từ MinIO nếu có
         if customer.face_encoding_path:
             try:
-                # Chuẩn hóa path để tìm file
-                image_path_str = customer.face_encoding_path
-                image_path_str = image_path_str.replace('/code/app/uploads/', '').replace('/app/uploads/', '').replace('/uploads/', '').replace('uploads/', '')
-                if image_path_str.startswith('/'):
-                    image_path_str = image_path_str[1:]
-                
-                image_file = upload_dir / image_path_str
-                if image_file.exists():
-                    os.remove(image_file)
-                    logging.getLogger(__name__).info(f"Deleted image file: {image_file}")
+                # Nếu là MinIO path (images/...), xóa trực tiếp
+                if customer.face_encoding_path.startswith('images/'):
+                    minio_service.delete_file(customer.face_encoding_path)
+                    logging.getLogger(__name__).info(f"Deleted image from MinIO: {customer.face_encoding_path}")
+                else:
+                    # Nếu là path cũ (local), thử chuyển sang MinIO path và xóa
+                    image_path_str = customer.face_encoding_path.replace('/code/app/uploads/', '').replace('/app/uploads/', '').replace('/uploads/', '').replace('uploads/', '').replace(f'{settings.UPLOAD_DIR}/', '')
+                    if image_path_str.startswith('/'):
+                        image_path_str = image_path_str[1:]
+                    minio_object_path = f"images/{image_path_str}"
+                    minio_service.delete_file(minio_object_path)
+                    logging.getLogger(__name__).info(f"Deleted image from MinIO: {minio_object_path}")
             except Exception as e:
-                logging.getLogger(__name__).warning(f"Could not delete image file: {e}")
+                logging.getLogger(__name__).warning(f"Could not delete image from MinIO: {e}")
         
-        # Xóa face encoding file nếu có
+        # Xóa face encoding từ MinIO nếu có
         try:
-            encoding_file = Path(settings.KNOWN_FACES_DIR) / f"{customer_id}.pkl"
-            if encoding_file.exists():
-                os.remove(encoding_file)
-                logging.getLogger(__name__).info(f"Deleted face encoding file: {encoding_file}")
-                # Xóa khỏi memory cache của face_service
-                if str(customer_id) in face_service.known_encodings:
-                    del face_service.known_encodings[str(customer_id)]
-                if str(customer_id) in face_service.known_names:
-                    del face_service.known_names[str(customer_id)]
+            encoding_object_path = f"encodings/{customer_id}.pkl"
+            if minio_service.file_exists(encoding_object_path):
+                minio_service.delete_file(encoding_object_path)
+                logging.getLogger(__name__).info(f"Deleted face encoding from MinIO: {encoding_object_path}")
         except Exception as e:
-            logging.getLogger(__name__).warning(f"Could not delete face encoding file: {e}")
+            logging.getLogger(__name__).warning(f"Could not delete face encoding from MinIO: {e}")
+        
+        # Xóa khỏi memory cache của face_service
+        try:
+            if str(customer_id) in face_service.known_encodings:
+                del face_service.known_encodings[str(customer_id)]
+            if str(customer_id) in face_service.known_names:
+                del face_service.known_names[str(customer_id)]
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Could not delete face encoding from cache: {e}")
         
         # Hard delete: xóa thật sự khỏi database
         db.delete(customer)
@@ -649,7 +715,7 @@ def _auto_register_customer_from_image(
     """
     customer = Customer(
         name="Guest",
-        face_encoding_path=str(image_path),
+        face_encoding_path="",  # Sẽ cập nhật sau
         phone=None,
         email=None,
     )
@@ -657,22 +723,34 @@ def _auto_register_customer_from_image(
     db.commit()
     db.refresh(customer)
 
-    final_image_path = upload_dir / f"{customer.id}{file_extension}"
-    if image_path.exists():
-        image_path.rename(final_image_path)
+    try:
+        # Đọc ảnh từ file tạm
+        with open(image_path, "rb") as f:
+            image_data = f.read()
+        
+        # Upload ảnh lên MinIO
+        minio_object_path = f"images/customer_{customer.id}{file_extension}"
+        content_type = f"image/{file_extension[1:]}" if file_extension else "image/jpeg"
+        
+        if not minio_service.upload_file(minio_object_path, image_data, content_type):
+            logging.getLogger(__name__).warning(f"Could not upload image to MinIO for customer {customer.id}")
+        
+        # Cố gắng lưu face encoding, nếu thất bại vẫn giữ lại customer
+        saved = face_service.save_face_encoding(str(customer.id), customer.name, str(image_path))
+        if not saved:
+            # Log cảnh báo nhưng KHÔNG xóa customer, để vẫn có thể dùng cho demo / order
+            logging.getLogger(__name__).warning(
+                f"Could not save face encoding for customer {customer.id} from image {image_path}"
+            )
 
-    # Cố gắng lưu face encoding, nếu thất bại vẫn giữ lại customer
-    saved = face_service.save_face_encoding(str(customer.id), customer.name, str(final_image_path))
-    if not saved:
-        # Log cảnh báo nhưng KHÔNG xóa customer, để vẫn có thể dùng cho demo / order
-        logging.getLogger(__name__).warning(
-            f"Could not save face encoding for customer {customer.id} from image {final_image_path}"
-        )
-
-    # Lưu relative path
-    customer.face_encoding_path = f"{settings.UPLOAD_DIR}/{customer.id}{file_extension}"
-    db.commit()
-    db.refresh(customer)
+        # Lưu MinIO object path
+        customer.face_encoding_path = minio_object_path
+        db.commit()
+        db.refresh(customer)
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Error in _auto_register_customer_from_image: {e}", exc_info=True)
+        # Vẫn trả về customer dù có lỗi
+    
     return customer
 
 
@@ -711,20 +789,20 @@ async def recognize_face(
             "message": "Task sent to Spark for processing"
         }
 
-        # Xử lý trực tiếp
-        if branch_id:
-            # Ưu tiên so sánh với khách đã từng đặt hàng tại branch này
-            branch_orders = db.query(Order).filter(Order.branch_id == branch_id).all()
-            branch_customer_ids = list({o.customer_id for o in branch_orders})
-            if branch_customer_ids:
-                result, confidence = face_service.recognize_face_in_branch(
-                    str(image_path), 
-                    [str(cid) for cid in branch_customer_ids]
-                )
-            else:
-                result, confidence = face_service.recognize_face(str(image_path))
+    # Xử lý trực tiếp
+    if branch_id:
+        # Ưu tiên so sánh với khách đã từng đặt hàng tại branch này
+        branch_orders = db.query(Order).filter(Order.branch_id == branch_id).all()
+        branch_customer_ids = list({o.customer_id for o in branch_orders})
+        if branch_customer_ids:
+            result, confidence = face_service.recognize_face_in_branch(
+                str(image_path), 
+                [str(cid) for cid in branch_customer_ids]
+            )
         else:
             result, confidence = face_service.recognize_face(str(image_path))
+    else:
+        result, confidence = face_service.recognize_face(str(image_path))
     
     customer: Optional[Customer] = None
     auto_registered = False
@@ -739,7 +817,7 @@ async def recognize_face(
         confidence = confidence or 0.0
 
     customer_id = customer.id if customer else None
-        
+
     # Lưu log
     log = RecognitionLog(
         customer_id=customer_id,
@@ -812,8 +890,8 @@ async def recognize_at_branch(
     - Nếu KHÔNG nhận diện được: tự động đăng ký khách mới dựa trên khuôn mặt tại chi nhánh này.
     """
     
-    # Kiểm tra branch tồn tại
-    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    # Kiểm tra branch tồn tại và đang active
+    branch = db.query(Branch).filter(Branch.id == branch_id, Branch.is_active == True).first()
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
     
@@ -834,7 +912,7 @@ async def recognize_at_branch(
             "message": "Recognition task sent to Spark for processing"
         }
 
-        # Xử lý trực tiếp
+    # Xử lý trực tiếp
     # Trước tiên kiểm tra xem có face trong ảnh không
     test_encoding = face_service.encode_face(str(image_path))
     if test_encoding is None:

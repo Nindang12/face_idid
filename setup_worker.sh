@@ -54,10 +54,12 @@ SPARK_HOME=/opt/spark
 SPARK_MASTER=spark://$HOST_IP:7077
 SPARK_MASTER_HOST=$HOST_IP
 
-# Hadoop Configuration
-HADOOP_HOME=/opt/hadoop
-HDFS_NAMENODE=hdfs://$HOST_IP:9000
-HDFS_DATA_DIR=/face_recognition/data
+# MinIO Configuration (Object Storage)
+MINIO_ENDPOINT=$HOST_IP:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin123
+MINIO_BUCKET_NAME=face-recognition-data
+MINIO_USE_SSL=false
 
 # Database Configuration
 DATABASE_URL=postgresql://faceid:faceid123@$HOST_IP:5433/faceid
@@ -81,7 +83,7 @@ echo "   - Branch ID: $BRANCH_ID"
 echo "   - Host IP: $HOST_IP"
 echo "   - Kafka: $HOST_IP:9092"
 echo "   - Spark Master: spark://$HOST_IP:7077"
-echo "   - HDFS: hdfs://$HOST_IP:9000"
+echo "   - MinIO: $HOST_IP:9000"
 echo "   - Database: $HOST_IP:5433"
 echo ""
 echo "🚀 Để chạy Spark Streaming worker:"

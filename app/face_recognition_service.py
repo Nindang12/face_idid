@@ -4,6 +4,7 @@ import os
 import pickle
 from pathlib import Path
 from app.config import settings
+from app.minio_service import minio_service
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -11,24 +12,32 @@ logger = logging.getLogger(__name__)
 
 class FaceRecognitionService:
     def __init__(self):
-        self.known_faces_dir = Path(settings.KNOWN_FACES_DIR)
-        self.known_faces_dir.mkdir(exist_ok=True)
         self.known_encodings = {}
         self.known_names = {}
         self.load_known_faces()
     
     def load_known_faces(self):
-        """Load tất cả khuôn mặt đã biết từ thư mục"""
-        for file_path in self.known_faces_dir.glob("*.pkl"):
-            try:
-                with open(file_path, 'rb') as f:
-                    data = pickle.load(f)
-                    user_id = file_path.stem
-                    self.known_encodings[user_id] = data['encoding']
-                    self.known_names[user_id] = data['name']
-                logger.info(f"Loaded face encoding for user: {user_id}")
-            except Exception as e:
-                logger.error(f"Error loading face encoding from {file_path}: {e}")
+        """Load tất cả khuôn mặt đã biết từ MinIO"""
+        try:
+            # Liệt kê tất cả encodings từ MinIO
+            encoding_files = minio_service.list_files(prefix="encodings/")
+            
+            for object_path in encoding_files:
+                if object_path.endswith('.pkl'):
+                    try:
+                        # Download encoding từ MinIO
+                        encoding_data = minio_service.download_file(object_path)
+                        if encoding_data:
+                            data = pickle.loads(encoding_data)
+                            # Extract user_id từ object path (encodings/user_id.pkl)
+                            user_id = Path(object_path).stem
+                            self.known_encodings[user_id] = data['encoding']
+                            self.known_names[user_id] = data['name']
+                            logger.info(f"Loaded face encoding for user: {user_id} from MinIO")
+                    except Exception as e:
+                        logger.error(f"Error loading face encoding from MinIO {object_path}: {e}")
+        except Exception as e:
+            logger.error(f"Error loading known faces from MinIO: {e}")
     
     def encode_face(self, image_path: str):
         """Encode khuôn mặt từ ảnh"""
@@ -46,20 +55,26 @@ class FaceRecognitionService:
             return None
     
     def save_face_encoding(self, user_id: str, name: str, image_path: str):
-        """Lưu encoding của khuôn mặt"""
+        """Lưu encoding của khuôn mặt lên MinIO"""
         encoding = self.encode_face(image_path)
         if encoding is not None:
-            file_path = self.known_faces_dir / f"{user_id}.pkl"
-            with open(file_path, 'wb') as f:
-                pickle.dump({
-                    'encoding': encoding,
-                    'name': name
-                }, f)
+            # Serialize encoding data
+            encoding_data = pickle.dumps({
+                'encoding': encoding,
+                'name': name
+            })
             
-            self.known_encodings[user_id] = encoding
-            self.known_names[user_id] = name
-            logger.info(f"Saved face encoding for user: {user_id}")
-            return True
+            # Upload lên MinIO
+            object_path = f"encodings/{user_id}.pkl"
+            if minio_service.upload_file(object_path, encoding_data, "application/octet-stream"):
+                # Cập nhật cache
+                self.known_encodings[user_id] = encoding
+                self.known_names[user_id] = name
+                logger.info(f"Saved face encoding for user: {user_id} to MinIO")
+                return True
+            else:
+                logger.error(f"Failed to save face encoding for user: {user_id} to MinIO")
+                return False
         return False
     
     def recognize_face(self, image_path: str, tolerance: float = 0.6):

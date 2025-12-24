@@ -403,6 +403,12 @@
         async function loadBranches() {
             try {
                 const res = await fetch(`${API_BASE}/branches/`);
+                if (!res.ok) {
+                    const text = await res.text();
+                    console.error('Error loading branches:', text);
+                    statusEl.textContent = 'Lỗi tải danh sách chi nhánh: ' + text;
+                    return;
+                }
                 const branches = await res.json();
                 branchSelect.innerHTML = '<option value="">-- Chọn chi nhánh --</option>';
                 branches.forEach(b => {
@@ -501,6 +507,17 @@
                         method: 'POST',
                         body: formData
                     });
+                    
+                    // Kiểm tra content-type trước khi parse JSON
+                    const contentType = res.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await res.text();
+                        statusEl.textContent = `Lỗi: ${text || 'Invalid response format'}`;
+                        resultHeader.innerHTML = `<span class="badge badge-fail">LỖI</span>`;
+                        resultJson.textContent = text;
+                        return;
+                    }
+                    
                     const data = await res.json();
 
                     // Xử lý trường hợp không có face trong ảnh
@@ -794,6 +811,16 @@
                     method: 'POST',
                     body: formData
                 });
+
+                // Kiểm tra content-type trước khi parse JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    alert('Lỗi thanh toán: ' + text);
+                    btnPayment.disabled = false;
+                    btnPayment.textContent = '💳 Thanh Toán';
+                    return;
+                }
 
                 const result = await response.json();
 

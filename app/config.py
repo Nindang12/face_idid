@@ -16,10 +16,12 @@ class Settings:
     SPARK_MASTER: str = os.getenv("SPARK_MASTER", f"spark://{HOST_IP}:7077")
     SPARK_HOME: str = os.getenv("SPARK_HOME", "/opt/spark")  # Đường dẫn Spark trên máy host
     
-    # Hadoop Configuration
-    HADOOP_HOME: str = os.getenv("HADOOP_HOME", "/opt/hadoop")
-    HDFS_NAMENODE: str = os.getenv("HDFS_NAMENODE", f"hdfs://{HOST_IP}:9000")
-    HDFS_DATA_DIR: str = os.getenv("HDFS_DATA_DIR", "/face_recognition/data")  # Thư mục trên HDFS để lưu dữ liệu
+    # MinIO Configuration (Object Storage thay thế Hadoop)
+    MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", f"{HOST_IP}:9000")
+    MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
+    MINIO_BUCKET_NAME: str = os.getenv("MINIO_BUCKET_NAME", "face-recognition-data")
+    MINIO_USE_SSL: bool = os.getenv("MINIO_USE_SSL", "false").lower() == "true"
     
     # Database Configuration
     # PostgreSQL cho môi trường phân tán

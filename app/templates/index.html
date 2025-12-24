@@ -833,6 +833,11 @@
         async function loadBranches() {
             try {
                 const response = await fetch(`${API_BASE}/branches/`);
+                if (!response.ok) {
+                    const text = await response.text();
+                    console.error('Error loading branches:', text);
+                    return;
+                }
                 const branches = await response.json();
                 
                 // Update branch selects
@@ -881,6 +886,11 @@
         async function loadCustomers() {
             try {
                 const response = await fetch(`${API_BASE}/customers/`);
+                if (!response.ok) {
+                    const text = await response.text();
+                    console.error('Error loading customers:', text);
+                    return;
+                }
                 const customers = await response.json();
                 
                 // Update customer selects
@@ -985,6 +995,15 @@
                     method: 'POST',
                     body: formData
                 });
+                
+                // Kiểm tra content-type trước khi parse JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    showAlert(`Lỗi: ${text || 'Invalid response format'}`, 'error');
+                    return;
+                }
+                
                 const result = await response.json();
                 if (response.ok) {
                     showAlert('Tạo chi nhánh thành công!', 'success');
@@ -1018,6 +1037,15 @@
                     method: 'POST',
                     body: formData
                 });
+                
+                // Kiểm tra content-type trước khi parse JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    resultDiv.innerHTML = `<div class="alert error show">Lỗi: ${text || 'Invalid response format'}</div>`;
+                    return;
+                }
+                
                 const result = await response.json();
                 
                 if (result.status === 'processing') {
@@ -1080,6 +1108,15 @@
                     method: 'POST',
                     body: formData
                 });
+                
+                // Kiểm tra content-type trước khi parse JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    showAlert(`Lỗi: ${text || 'Invalid response format'}`, 'error');
+                    return;
+                }
+                
                 const result = await response.json();
                 if (response.ok) {
                     showAlert('Tạo đơn hàng thành công!', 'success');
@@ -1103,6 +1140,10 @@
 
             try {
                 const response = await fetch(`${API_BASE}/customers/${customerId}/orders`);
+                if (!response.ok) {
+                    console.error('Error loading customer orders:', await response.text());
+                    return;
+                }
                 const orders = await response.json();
                 
                 const container = document.getElementById('customer-orders-list');
@@ -1157,6 +1198,11 @@
             
             try {
                 const response = await fetch(url);
+                if (!response.ok) {
+                    const text = await response.text();
+                    showAlert('Lỗi khi tải logs: ' + text, 'error');
+                    return;
+                }
                 const logs = await response.json();
                 
                 const container = document.getElementById('logs-container');
@@ -1262,6 +1308,10 @@
         async function loadDatabaseStats() {
             try {
                 const response = await fetch(`${API_BASE}/stats/`);
+                if (!response.ok) {
+                    console.error('Error loading stats:', await response.text());
+                    return;
+                }
                 const stats = await response.json();
                 
                 document.getElementById('stat-customers').textContent = stats.total_customers || 0;
@@ -1279,6 +1329,10 @@
             const limit = parseInt(document.getElementById('orders-limit').value) || 50;
             try {
                 const response = await fetch(`${API_BASE}/orders/?limit=${limit}`);
+                if (!response.ok) {
+                    console.error('Error loading orders:', await response.text());
+                    return;
+                }
                 const orders = await response.json();
                 
                 const container = document.getElementById('orders-table-container');
@@ -1326,6 +1380,10 @@
         async function loadBranchStats() {
             try {
                 const response = await fetch(`${API_BASE}/orders/stats/by-branch`);
+                if (!response.ok) {
+                    console.error('Error loading branch stats:', await response.text());
+                    return;
+                }
                 const stats = await response.json();
                 
                 const container = document.getElementById('branch-stats-container');
@@ -1357,6 +1415,10 @@
             const limit = parseInt(document.getElementById('customer-stats-limit').value) || 20;
             try {
                 const response = await fetch(`${API_BASE}/orders/stats/by-customer?limit=${limit}`);
+                if (!response.ok) {
+                    console.error('Error loading customer stats:', await response.text());
+                    return;
+                }
                 const stats = await response.json();
                 
                 const container = document.getElementById('customer-stats-container');
@@ -1394,6 +1456,10 @@
             const limit = parseInt(document.getElementById('detailed-logs-limit').value) || 50;
             try {
                 const response = await fetch(`${API_BASE}/recognition-logs/detailed?limit=${limit}`);
+                if (!response.ok) {
+                    console.error('Error loading detailed logs:', await response.text());
+                    return;
+                }
                 const logs = await response.json();
                 
                 const container = document.getElementById('detailed-logs-container');
@@ -1445,6 +1511,12 @@
                 const response = await fetch(`${API_BASE}/customers/${customerId}/details`);
                 if (!response.ok) {
                     throw new Error('Không thể tải thông tin khách hàng');
+                }
+                
+                if (!response.ok) {
+                    const text = await response.text();
+                    alert('Lỗi khi tải chi tiết khách hàng: ' + text);
+                    return;
                 }
                 
                 const data = await response.json();

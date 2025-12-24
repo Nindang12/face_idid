@@ -85,6 +85,26 @@ services:
     networks:
       - faceid-network
 
+  minio:
+    image: minio/minio:latest
+    container_name: faceid-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - faceid-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
   web:
     build: .
     container_name: faceid-web
@@ -102,6 +122,12 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-faceid}:${POSTGRES_PASSWORD:-faceid123}@postgres:5432/${POSTGRES_DB:-faceid}
       UPLOAD_DIR: /code/app/uploads
       KNOWN_FACES_DIR: /code/app/known_faces
+      # MinIO Configuration
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-${HOST_IP:-192.168.1.7}:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-face-recognition-data}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
     volumes:
       - ./app:/code/app
       - ./uploads:/code/app/uploads
@@ -111,3 +137,4 @@ services:
 
 volumes:
   postgres_data:
+  minio_data:
