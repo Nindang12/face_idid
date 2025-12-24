@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Hệ Thống Nhận Diện Khách Hàng - Cửa Hàng Cà Phê</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #8B4513 0%, #D2691E 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #8B4513 0%, #D2691E 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 15px 30px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1em;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            color: #D2691E;
+        }
+
+        .tab.active {
+            color: #D2691E;
+            border-bottom-color: #D2691E;
+            font-weight: bold;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        input[type="number"],
+        input[type="file"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="email"]:focus,
+        input[type="tel"]:focus,
+        input[type="number"]:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #D2691E;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #8B4513 0%, #D2691E 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(139, 69, 19, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-success {
+            background: #28a745;
+        }
+
+        .branches-grid,
+        .customers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .branch-card,
+        .customer-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .branch-card:hover,
+        .customer-card:hover {
+            border-color: #D2691E;
+            box-shadow: 0 5px 15px rgba(139, 69, 19, 0.2);
+        }
+
+        .branch-card h3,
+        .customer-card h3 {
+            color: #D2691E;
+            margin-bottom: 10px;
+        }
+
+        .branch-card p,
+        .customer-card p {
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        .customer-avatar {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            object-position: center;
+            border-radius: 50%;
+            display: block;
+            margin: 0 auto 15px;
+            border: 3px solid #D2691E;
+            background: #f3e9e4;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .customer-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .edit-btn {
+            background: #D2691E;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .edit-btn:hover {
+            background: #8B4513;
+            transform: translateY(-1px);
+        }
+
+        .customer-edit-form {
+            display: none;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #e0e0e0;
+        }
+
+        .customer-edit-form.active {
+            display: block;
+        }
+
+        .customer-edit-form input,
+        .customer-edit-form .file-input-wrapper {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            padding: 8px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .form-actions .btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 0.9em;
+        }
+
+        .btn-cancel {
+            background: #6c757d;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .card-actions .btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 0.9em;
+        }
+
+        /* Customer Detail Modal */
+        .customer-detail-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .customer-detail-modal.show {
+            display: flex;
+        }
+
+        .customer-detail-content {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 900px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .customer-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .customer-detail-header h2 {
+            color: #D2691E;
+            margin: 0;
+        }
+
+        .close-detail-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .close-detail-btn:hover {
+            background: #c82333;
+        }
+
+        .detail-section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .detail-section h3 {
+            color: #8B4513;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .branch-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #D2691E;
+        }
+
+        .branch-item h4 {
+            color: #8B4513;
+            margin-bottom: 10px;
+        }
+
+        .items-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+        }
+
+        .items-list li {
+            padding: 5px 0;
+            color: #555;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .items-list li:last-child {
+            border-bottom: none;
+        }
+
+        .timeline-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #28a745;
+        }
+
+        .timeline-item .timeline-date {
+            font-weight: bold;
+            color: #8B4513;
+            margin-bottom: 8px;
+        }
+
+        .combo-item {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .combo-items {
+            flex: 1;
+            color: #555;
+        }
+
+        .combo-frequency {
+            background: #D2691E;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .customer-card {
+            cursor: pointer;
+        }
+
+        .customer-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .alert.show {
+            display: block;
+            animation: slideDown 0.3s;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .preview-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .preview-image.show {
+            display: block;
+        }
+
+        .logs-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .log-item {
+            padding: 10px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .log-item:last-child {
+            border-bottom: none;
+        }
+
+        .log-status {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .log-status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .log-status.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .order-display {
+            background: #f8f9fa;
+            border: 2px solid #D2691E;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .order-display h4 {
+            color: #D2691E;
+            margin-bottom: 10px;
+        }
+
+        .order-item {
+            padding: 8px;
+            background: white;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>☕ Hệ Thống Nhận Diện Khách Hàng</h1>
+            <p>Cửa Hàng Cà Phê - Face Recognition System</p>
+        </div>
+
+        <div class="content">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('branches')">Quản Lý Chi Nhánh</button>
+                <button class="tab" onclick="switchTab('customers')">Danh Sách Khách Hàng</button>
+                <button class="tab" onclick="switchTab('recognize')">Nhận Diện Khách Hàng</button>
+                <button class="tab" onclick="switchTab('orders')">Quản Lý Đơn Hàng</button>
+                <button class="tab" onclick="switchTab('logs')">Logs</button>
+                <button class="tab" onclick="switchTab('database')">📊 Xem Database</button>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <!-- Branches Tab -->
+            <div id="branches" class="tab-content active">
+                <h2>Quản Lý Chi Nhánh</h2>
+                <form id="create-branch-form" class="form-group">
+                    <div class="form-group">
+                        <label>Tên Chi Nhánh:</label>
+                        <input type="text" id="branch-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Địa Chỉ:</label>
+                        <input type="text" id="branch-location">
+                    </div>
+                    <div class="form-group">
+                        <label>Mô tả:</label>
+                        <input type="text" id="branch-description">
+                    </div>
+                    <button type="submit" class="btn">Tạo Chi Nhánh</button>
+                </form>
+
+                <h3 style="margin-top: 30px;">Danh Sách Chi Nhánh</h3>
+                <div id="branches-list" class="branches-grid"></div>
+            </div>
+
+            <!-- Customers Tab -->
+            <div id="customers" class="tab-content">
+                <h2>Danh Sách Khách Hàng Đã Đăng Ký</h2>
+                <p style="margin: 8px 0 20px; color:#555; font-size:0.95em;">
+                    Khách hàng được tạo tự động khi hệ thống nhận diện khuôn mặt lần đầu,
+                    mỗi khách có một ID riêng để theo dõi lịch sử mua hàng tại các chi nhánh.
+                    <strong>Click vào thẻ khách hàng để xem thông tin chi tiết.</strong>
+                </p>
+                <div id="customers-list" class="customers-grid"></div>
+                    </div>
+
+            <!-- Customer Detail Modal -->
+            <div id="customer-detail-modal" class="customer-detail-modal">
+                <div class="customer-detail-content">
+                    <div class="customer-detail-header">
+                        <h2 id="detail-customer-name">Chi Tiết Khách Hàng</h2>
+                        <button class="close-detail-btn" onclick="closeCustomerDetail()">✕ Đóng</button>
+                    </div>
+                    <div id="customer-detail-body">
+                        <!-- Nội dung sẽ được load động -->
+                    </div>
+                    </div>
+            </div>
+
+            <!-- Recognize Tab -->
+            <div id="recognize" class="tab-content">
+                <h2>Nhận Diện Khách Hàng</h2>
+                <form id="recognize-form">
+                    <div class="form-group">
+                        <label>Chi Nhánh:</label>
+                        <select id="recognize-branch-id">
+                            <option value="">-- Tất cả chi nhánh --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Ảnh cần nhận diện:</label>
+                        <input type="file" id="recognize-image" accept="image/*" required>
+                        <img id="recognize-preview" class="preview-image">
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="use-spark">
+                        <label for="use-spark">Sử dụng Spark Streaming (Kafka)</label>
+                    </div>
+                    <button type="submit" class="btn">Nhận Diện</button>
+                </form>
+                <div id="recognize-result" style="margin-top: 20px;"></div>
+            </div>
+
+            <!-- Orders Tab -->
+            <div id="orders" class="tab-content">
+                <h2>Quản Lý Đơn Hàng</h2>
+                <form id="create-order-form">
+                    <div class="form-group">
+                        <label>Khách Hàng:</label>
+                        <select id="order-customer-id" required>
+                            <option value="">-- Chọn Khách Hàng --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Chi Nhánh:</label>
+                        <select id="order-branch-id" required>
+                            <option value="">-- Chọn Chi Nhánh --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Danh Sách Món (JSON):</label>
+                        <textarea id="order-items" rows="4" placeholder='[{"name": "Cà phê đen", "quantity": 1, "price": 25000}]' required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Tổng Tiền:</label>
+                        <input type="number" id="order-total" step="0.01" required>
+                    </div>
+                    <button type="submit" class="btn">Tạo Đơn Hàng</button>
+                </form>
+
+                <h3 style="margin-top: 30px;">Tìm Đơn Hàng Theo Khách Hàng</h3>
+                <div class="form-group">
+                    <label>Chọn Khách Hàng:</label>
+                    <select id="search-customer-id" onchange="loadCustomerOrders()">
+                        <option value="">-- Chọn Khách Hàng --</option>
+                    </select>
+                </div>
+                <div id="customer-orders-list" style="margin-top: 20px;"></div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div id="logs" class="tab-content">
+                <h2>Logs Nhận Diện</h2>
+                <div class="form-group">
+                    <label>Lọc theo Chi Nhánh:</label>
+                    <select id="logs-branch-id" onchange="loadLogs()">
+                        <option value="">-- Tất cả --</option>
+                    </select>
+                </div>
+                <div id="logs-container" class="logs-container"></div>
+            </div>
+
+            <!-- Database View Tab -->
+            <div id="database" class="tab-content">
+                <h2>📊 Xem Dữ Liệu Database</h2>
+                
+                <!-- Statistics Cards -->
+                <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; text-align: center;">
+                        <h3 style="font-size: 2em; margin: 0;" id="stat-customers">-</h3>
+                        <p style="margin: 5px 0 0 0;">Khách Hàng</p>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 20px; border-radius: 12px; text-align: center;">
+                        <h3 style="font-size: 2em; margin: 0;" id="stat-orders">-</h3>
+                        <p style="margin: 5px 0 0 0;">Đơn Hàng</p>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 20px; border-radius: 12px; text-align: center;">
+                        <h3 style="font-size: 2em; margin: 0;" id="stat-branches">-</h3>
+                        <p style="margin: 5px 0 0 0;">Chi Nhánh</p>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white; padding: 20px; border-radius: 12px; text-align: center;">
+                        <h3 style="font-size: 2em; margin: 0;" id="stat-revenue">-</h3>
+                        <p style="margin: 5px 0 0 0;">Doanh Thu</p>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; padding: 20px; border-radius: 12px; text-align: center;">
+                        <h3 style="font-size: 2em; margin: 0;" id="stat-success-rate">-</h3>
+                        <p style="margin: 5px 0 0 0;">Tỷ Lệ Nhận Diện</p>
+                    </div>
+                </div>
+
+                <!-- Database Sections -->
+                <div class="database-sections">
+                    <div class="db-section" style="margin-bottom: 30px;">
+                        <h3>📋 Danh Sách Đơn Hàng</h3>
+                        <div class="form-group" style="display: flex; gap: 10px; align-items: center;">
+                            <button class="btn" onclick="loadOrders()" style="width: auto; padding: 10px 20px;">Tải Lại</button>
+                            <input type="number" id="orders-limit" placeholder="Số lượng (mặc định: 50)" value="50" style="width: 200px;">
+                        </div>
+                        <div id="orders-table-container" style="overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; background: #f8f9fa;"></div>
+                    </div>
+
+                    <div class="db-section" style="margin-bottom: 30px;">
+                        <h3>🏢 Thống Kê Theo Chi Nhánh</h3>
+                        <button class="btn" onclick="loadBranchStats()" style="width: auto; padding: 10px 20px;">Tải Thống Kê</button>
+                        <div id="branch-stats-container" style="margin-top: 15px;"></div>
+                    </div>
+
+                    <div class="db-section" style="margin-bottom: 30px;">
+                        <h3>👥 Thống Kê Theo Khách Hàng</h3>
+                        <div class="form-group" style="display: flex; gap: 10px; align-items: center;">
+                            <button class="btn" onclick="loadCustomerStats()" style="width: auto; padding: 10px 20px;">Tải Thống Kê</button>
+                            <input type="number" id="customer-stats-limit" placeholder="Số lượng (mặc định: 20)" value="20" style="width: 200px;">
+                        </div>
+                        <div id="customer-stats-container" style="margin-top: 15px;"></div>
+                    </div>
+
+                    <div class="db-section" style="margin-bottom: 30px;">
+                        <h3>📝 Logs Nhận Diện Chi Tiết</h3>
+                        <div class="form-group" style="display: flex; gap: 10px; align-items: center;">
+                            <button class="btn" onclick="loadDetailedLogs()" style="width: auto; padding: 10px 20px;">Tải Logs</button>
+                            <input type="number" id="detailed-logs-limit" placeholder="Số lượng (mặc định: 50)" value="50" style="width: 200px;">
+                        </div>
+                        <div id="detailed-logs-container" style="margin-top: 15px; max-height: 500px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; background: #f8f9fa;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+            
+            if (tabName === 'branches' || tabName === 'customers' || tabName === 'recognize' || tabName === 'orders') {
+                loadBranches();
+                if (tabName === 'customers' || tabName === 'orders') {
+                    loadCustomers();
+                }
+            }
+            if (tabName === 'logs') {
+                loadLogs();
+            }
+            if (tabName === 'database') {
+                loadDatabaseStats();
+                loadOrders();
+                loadBranchStats();
+                loadCustomerStats();
+                loadDetailedLogs();
+            }
+        }
+
+        // Alert system
+        function showAlert(message, type = 'info') {
+            const container = document.getElementById('alert-container');
+            container.innerHTML = `<div class="alert ${type} show">${message}</div>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        }
+
+        // Image preview
+        document.getElementById('recognize-image').addEventListener('change', function(e) {
+            previewImage(e.target.files[0], 'recognize-preview');
+        });
+
+        function previewImage(file, previewId) {
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.getElementById(previewId);
+                    img.src = e.target.result;
+                    img.classList.add('show');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Load branches
+        async function loadBranches() {
+            try {
+                const response = await fetch(`${API_BASE}/branches/`);
+                const branches = await response.json();
+                
+                // Update branch selects
+                const selects = ['recognize-branch-id', 'order-branch-id', 'logs-branch-id'];
+                selects.forEach(selectId => {
+                    const select = document.getElementById(selectId);
+                    const currentValue = select.value;
+                    select.innerHTML = selectId === 'recognize-branch-id' || selectId === 'logs-branch-id' 
+                        ? '<option value="">-- Tất cả --</option>'
+                        : '<option value="">-- Chọn Chi Nhánh --</option>';
+                    
+                    branches.forEach(branch => {
+                        const option = document.createElement('option');
+                        option.value = branch.id;
+                        option.textContent = `${branch.name}${branch.location ? ' - ' + branch.location : ''}`;
+                        select.appendChild(option);
+                    });
+                    
+                    if (currentValue) select.value = currentValue;
+                });
+
+                // Update branches list
+                const branchesList = document.getElementById('branches-list');
+                if (branchesList) {
+                    branchesList.innerHTML = '';
+                    branches.forEach(branch => {
+                        const card = document.createElement('div');
+                        card.className = 'branch-card';
+                        card.innerHTML = `
+                            <h3>${branch.name}</h3>
+                            <p><strong>Địa chỉ:</strong> ${branch.location || 'N/A'}</p>
+                            <p>${branch.description || 'Không có mô tả'}</p>
+                            <div class="card-actions">
+                                <button class="btn btn-secondary" onclick="deleteBranch(${branch.id})">Xóa</button>
+                            </div>
+                        `;
+                        branchesList.appendChild(card);
+                    });
+                }
+            } catch (error) {
+                showAlert('Lỗi khi tải danh sách chi nhánh: ' + error.message, 'error');
+            }
+        }
+
+        // Load customers
+        async function loadCustomers() {
+            try {
+                const response = await fetch(`${API_BASE}/customers/`);
+                const customers = await response.json();
+                
+                // Update customer selects
+                const selects = ['order-customer-id', 'search-customer-id'];
+                selects.forEach(selectId => {
+                    const select = document.getElementById(selectId);
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">-- Chọn Khách Hàng --</option>';
+                    
+                    customers.forEach(customer => {
+                        const option = document.createElement('option');
+                        option.value = customer.id;
+                        option.textContent = `${customer.name}${customer.phone ? ' - ' + customer.phone : ''}`;
+                        select.appendChild(option);
+                    });
+                    
+                    if (currentValue) select.value = currentValue;
+                });
+
+                // Update customers list
+                const customersList = document.getElementById('customers-list');
+                if (customersList) {
+                    customersList.innerHTML = '';
+                    customers.forEach(customer => {
+                        // Use face_encoding_path from API (already converted to URL)
+                        let imageUrl = customer.face_encoding_path || '';
+                        
+                        // If no image URL, use default avatar
+                        if (!imageUrl) {
+                            imageUrl = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(customer.name) + '&background=D2691E&color=fff&size=100';
+                        }
+                        
+                        const card = document.createElement('div');
+                        card.className = 'customer-card';
+                        card.id = `customer-card-${customer.id}`;
+                        card.onclick = (e) => {
+                            // Không mở modal nếu click vào button
+                            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                                return;
+                            }
+                            showCustomerDetail(customer.id);
+                        };
+                        card.innerHTML = `
+                            <div class="customer-card-header">
+                            <h3>${customer.name}</h3>
+                                <div style="display: flex; gap: 5px;">
+                                    <button class="edit-btn" onclick="event.stopPropagation(); toggleEditCustomer(${customer.id})">✏️ Sửa</button>
+                                    <button class="edit-btn" onclick="event.stopPropagation(); deleteCustomer(${customer.id})" style="background: #dc3545;">🗑️ Xóa</button>
+                                </div>
+                            </div>
+                            <img class="customer-avatar" src="${imageUrl}" alt="Ảnh khách hàng" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(customer.name)}&background=D2691E&color=fff&size=100';">
+                            <div class="customer-info">
+                                <p><strong>ID:</strong> ${customer.id}</p>
+                                <p><strong>Điện thoại:</strong> <span id="phone-${customer.id}">${customer.phone || 'N/A'}</span></p>
+                                <p><strong>Email:</strong> <span id="email-${customer.id}">${customer.email || 'N/A'}</span></p>
+                                <p style="margin-top: 10px; color: #D2691E; font-size: 0.9em; font-style: italic;">👆 Click để xem chi tiết</p>
+                            </div>
+                            <div class="customer-edit-form" id="edit-form-${customer.id}">
+                                <div class="form-group">
+                                    <label>Tên:</label>
+                                    <input type="text" id="edit-name-${customer.id}" value="${customer.name}" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Điện thoại:</label>
+                                    <input type="tel" id="edit-phone-${customer.id}" value="${customer.phone || ''}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Email:</label>
+                                    <input type="email" id="edit-email-${customer.id}" value="${customer.email || ''}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Ảnh mới (tùy chọn):</label>
+                                    <div class="file-input-wrapper">
+                                        <input type="file" id="edit-image-${customer.id}" accept="image/*">
+                                    </div>
+                                    <small style="color: #666;">Chỉ chọn nếu muốn thay đổi ảnh</small>
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn" onclick="saveCustomer(${customer.id})">💾 Lưu</button>
+                                    <button class="btn btn-cancel" onclick="toggleEditCustomer(${customer.id})">❌ Hủy</button>
+                                </div>
+                            </div>
+                        `;
+                        customersList.appendChild(card);
+                    });
+                }
+            } catch (error) {
+                showAlert('Lỗi khi tải danh sách khách hàng: ' + error.message, 'error');
+            }
+        }
+
+        // Create branch
+        document.getElementById('create-branch-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('name', document.getElementById('branch-name').value);
+            formData.append('location', document.getElementById('branch-location').value);
+            formData.append('description', document.getElementById('branch-description').value);
+
+            try {
+                const response = await fetch(`${API_BASE}/branches/`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showAlert('Tạo chi nhánh thành công!', 'success');
+                    document.getElementById('create-branch-form').reset();
+                    loadBranches();
+                } else {
+                    showAlert('Lỗi: ' + result.detail, 'error');
+                }
+            } catch (error) {
+                showAlert('Lỗi khi tạo chi nhánh: ' + error.message, 'error');
+            }
+        });
+
+        // (Đăng ký khách hàng giờ được thực hiện tự động qua nhận diện khuôn mặt,
+        // nên không còn form đăng ký thủ công trên giao diện chính.)
+
+        // Recognize face
+        document.getElementById('recognize-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('image', document.getElementById('recognize-image').files[0]);
+            const branchId = document.getElementById('recognize-branch-id').value;
+            if (branchId) formData.append('branch_id', branchId);
+            formData.append('use_spark', document.getElementById('use-spark').checked);
+
+            const resultDiv = document.getElementById('recognize-result');
+            resultDiv.innerHTML = '<div class="loading"></div> Đang xử lý...';
+
+            try {
+                const response = await fetch(`${API_BASE}/recognize/`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                
+                if (result.status === 'processing') {
+                    resultDiv.innerHTML = `
+                        <div class="alert info show">
+                            Task ID: ${result.task_id}<br>
+                            Đang xử lý bằng Spark Streaming...
+                        </div>
+                    `;
+                } else if (result.recognized) {
+                    let orderHtml = '';
+                    if (result.latest_order) {
+                        const items = result.latest_order.items || [];
+                        orderHtml = `
+                            <div class="order-display">
+                                <h4>Đơn Hàng Gần Nhất:</h4>
+                                ${items.map(item => `
+                                    <div class="order-item">
+                                        ${item.name || item} x ${item.quantity || 1} - ${item.price ? new Intl.NumberFormat('vi-VN').format(item.price) + 'đ' : ''}
+                                    </div>
+                                `).join('')}
+                                <p><strong>Tổng tiền:</strong> ${new Intl.NumberFormat('vi-VN').format(result.latest_order.total_amount)}đ</p>
+                            </div>
+                        `;
+                    }
+                    resultDiv.innerHTML = `
+                        <div class="alert success show">
+                            <strong>Nhận diện thành công!</strong><br>
+                            Tên: ${result.customer.name}<br>
+                            Điện thoại: ${result.customer.phone || 'N/A'}<br>
+                            Email: ${result.customer.email || 'N/A'}<br>
+                            Độ tin cậy: ${(result.confidence * 100).toFixed(2)}%<br>
+                            ${result.message}
+                            ${orderHtml}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert error show">
+                            ${result.message}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="alert error show">Lỗi: ${error.message}</div>`;
+            }
+        });
+
+        // Create order
+        document.getElementById('create-order-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('customer_id', document.getElementById('order-customer-id').value);
+            formData.append('branch_id', document.getElementById('order-branch-id').value);
+            formData.append('items', document.getElementById('order-items').value);
+            formData.append('total_amount', document.getElementById('order-total').value);
+
+            try {
+                const response = await fetch(`${API_BASE}/orders/`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showAlert('Tạo đơn hàng thành công!', 'success');
+                    document.getElementById('create-order-form').reset();
+                    loadCustomerOrders();
+                } else {
+                    showAlert('Lỗi: ' + result.detail, 'error');
+                }
+            } catch (error) {
+                showAlert('Lỗi khi tạo đơn hàng: ' + error.message, 'error');
+            }
+        });
+
+        // Load customer orders
+        async function loadCustomerOrders() {
+            const customerId = document.getElementById('search-customer-id').value;
+            if (!customerId) {
+                document.getElementById('customer-orders-list').innerHTML = '';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/customers/${customerId}/orders`);
+                const orders = await response.json();
+                
+                const container = document.getElementById('customer-orders-list');
+                if (orders.length === 0) {
+                    container.innerHTML = '<p>Không có đơn hàng nào</p>';
+                    return;
+                }
+                
+                container.innerHTML = orders.map(order => {
+                    const items = order.items || [];
+                    return `
+                        <div class="order-display" style="margin-bottom: 15px;">
+                            <h4>Đơn hàng #${order.id} - ${new Date(order.created_at).toLocaleString('vi-VN')}</h4>
+                            ${items.map(item => `
+                                <div class="order-item">
+                                    ${item.name || item} x ${item.quantity || 1} - ${item.price ? new Intl.NumberFormat('vi-VN').format(item.price) + 'đ' : ''}
+                                </div>
+                            `).join('')}
+                            <p><strong>Tổng tiền:</strong> ${new Intl.NumberFormat('vi-VN').format(order.total_amount)}đ</p>
+                            <p><strong>Trạng thái:</strong> ${order.status}</p>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                showAlert('Lỗi khi tải đơn hàng: ' + error.message, 'error');
+            }
+        }
+
+        // Delete branch
+        async function deleteBranch(branchId) {
+            if (!confirm('Bạn có chắc muốn xóa chi nhánh này?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/branches/${branchId}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    showAlert('Xóa chi nhánh thành công!', 'success');
+                    loadBranches();
+                } else {
+                    showAlert('Lỗi khi xóa chi nhánh', 'error');
+                }
+            } catch (error) {
+                showAlert('Lỗi: ' + error.message, 'error');
+            }
+        }
+
+        // Load logs
+        async function loadLogs() {
+            const branchId = document.getElementById('logs-branch-id').value;
+            const url = branchId ? `${API_BASE}/logs/?branch_id=${branchId}` : `${API_BASE}/logs/`;
+            
+            try {
+                const response = await fetch(url);
+                const logs = await response.json();
+                
+                const container = document.getElementById('logs-container');
+                if (logs.length === 0) {
+                    container.innerHTML = '<p>Không có logs nào</p>';
+                    return;
+                }
+                
+                container.innerHTML = logs.map(log => `
+                    <div class="log-item">
+                        <div>
+                            <strong>Chi nhánh ID:</strong> ${log.branch_id || 'N/A'} | 
+                            <strong>Khách hàng ID:</strong> ${log.customer_id || 'N/A'} | 
+                            <strong>Time:</strong> ${new Date(log.created_at).toLocaleString('vi-VN')}
+                        </div>
+                        <span class="log-status ${log.recognized ? 'success' : 'failed'}">
+                            ${log.recognized ? '✓ Nhận diện' : '✗ Không nhận diện'}
+                        </span>
+                    </div>
+                `).join('');
+            } catch (error) {
+                showAlert('Lỗi khi tải logs: ' + error.message, 'error');
+            }
+        }
+
+        // Toggle edit form
+        function toggleEditCustomer(customerId) {
+            const editForm = document.getElementById(`edit-form-${customerId}`);
+            editForm.classList.toggle('active');
+        }
+
+        // Save customer changes
+        async function saveCustomer(customerId) {
+            const name = document.getElementById(`edit-name-${customerId}`).value;
+            const phone = document.getElementById(`edit-phone-${customerId}`).value;
+            const email = document.getElementById(`edit-email-${customerId}`).value;
+            const imageFile = document.getElementById(`edit-image-${customerId}`).files[0];
+
+            if (!name.trim()) {
+                showAlert('Tên khách hàng không được để trống!', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('name', name);
+            if (phone) formData.append('phone', phone);
+            if (email) formData.append('email', email);
+            if (imageFile) formData.append('image', imageFile);
+
+            try {
+                const response = await fetch(`${API_BASE}/customers/${customerId}`, {
+                    method: 'PUT',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('Cập nhật khách hàng thành công!', 'success');
+                    toggleEditCustomer(customerId); // Đóng form
+                    loadCustomers(); // Reload danh sách
+                } else {
+                    showAlert('Lỗi: ' + (result.detail || 'Không thể cập nhật'), 'error');
+                }
+            } catch (error) {
+                showAlert('Lỗi khi cập nhật: ' + error.message, 'error');
+            }
+        }
+
+        // Delete customer
+        async function deleteCustomer(customerId) {
+            if (!confirm('Bạn có chắc muốn xóa khách hàng này? Hành động này không thể hoàn tác.\n\nLưu ý: Tất cả đơn hàng và logs liên quan cũng sẽ bị xóa.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/customers/${customerId}`, {
+                    method: 'DELETE'
+                });
+                
+                // Kiểm tra xem response có phải JSON không
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`Server error: ${text.substring(0, 200)}`);
+                }
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('Xóa khách hàng thành công!', 'success');
+                    loadCustomers(); // Reload danh sách
+                } else {
+                    showAlert('Lỗi: ' + (result.detail || 'Không thể xóa'), 'error');
+                }
+            } catch (error) {
+                console.error('Delete customer error:', error);
+                showAlert('Lỗi khi xóa khách hàng: ' + error.message, 'error');
+            }
+        }
+
+        // Load database statistics
+        async function loadDatabaseStats() {
+            try {
+                const response = await fetch(`${API_BASE}/stats/`);
+                const stats = await response.json();
+                
+                document.getElementById('stat-customers').textContent = stats.total_customers || 0;
+                document.getElementById('stat-orders').textContent = stats.total_orders || 0;
+                document.getElementById('stat-branches').textContent = stats.total_branches || 0;
+                document.getElementById('stat-revenue').textContent = new Intl.NumberFormat('vi-VN').format(stats.total_revenue || 0) + 'đ';
+                document.getElementById('stat-success-rate').textContent = (stats.success_rate || 0).toFixed(1) + '%';
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Load orders
+        async function loadOrders() {
+            const limit = parseInt(document.getElementById('orders-limit').value) || 50;
+            try {
+                const response = await fetch(`${API_BASE}/orders/?limit=${limit}`);
+                const orders = await response.json();
+                
+                const container = document.getElementById('orders-table-container');
+                if (orders.length === 0) {
+                    container.innerHTML = '<p>Không có đơn hàng nào</p>';
+                    return;
+                }
+                
+                let html = '<table style="width: 100%; border-collapse: collapse;">';
+                html += '<thead><tr style="background: #D2691E; color: white;">';
+                html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">ID</th>';
+                html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Thời Gian</th>';
+                html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Khách Hàng</th>';
+                html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Chi Nhánh</th>';
+                html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Món</th>';
+                html += '<th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Tổng Tiền</th>';
+                html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Trạng Thái</th>';
+                html += '</tr></thead><tbody>';
+                
+                orders.forEach(order => {
+                    const items = order.items || [];
+                    const itemsText = items.map(item => 
+                        `${item.name || item} x${item.quantity || 1}`
+                    ).join(', ') || 'N/A';
+                    
+                    html += '<tr style="border-bottom: 1px solid #ddd;">';
+                    html += `<td style="padding: 8px; border: 1px solid #ddd;">${order.id}</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd;">${new Date(order.created_at).toLocaleString('vi-VN')}</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd;">${order.customer_name} (ID: ${order.customer_id})</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd;">${order.branch_name} (ID: ${order.branch_id})</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd;">${itemsText}</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${new Intl.NumberFormat('vi-VN').format(order.total_amount)}đ</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd;">${order.status}</td>`;
+                    html += '</tr>';
+                });
+                
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                showAlert('Lỗi khi tải đơn hàng: ' + error.message, 'error');
+            }
+        }
+
+        // Load branch statistics
+        async function loadBranchStats() {
+            try {
+                const response = await fetch(`${API_BASE}/orders/stats/by-branch`);
+                const stats = await response.json();
+                
+                const container = document.getElementById('branch-stats-container');
+                if (stats.length === 0) {
+                    container.innerHTML = '<p>Không có dữ liệu</p>';
+                    return;
+                }
+                
+                let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">';
+                stats.forEach(stat => {
+                    html += `
+                        <div style="border: 2px solid #D2691E; border-radius: 8px; padding: 15px; background: white;">
+                            <h4 style="color: #D2691E; margin: 0 0 10px 0;">${stat.branch_name}</h4>
+                            <p><strong>Tổng đơn hàng:</strong> ${stat.total_orders}</p>
+                            <p><strong>Doanh thu:</strong> ${new Intl.NumberFormat('vi-VN').format(stat.total_revenue)}đ</p>
+                            <p><strong>Khách hàng riêng:</strong> ${stat.unique_customers}</p>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                container.innerHTML = html;
+            } catch (error) {
+                showAlert('Lỗi khi tải thống kê chi nhánh: ' + error.message, 'error');
+            }
+        }
+
+        // Load customer statistics
+        async function loadCustomerStats() {
+            const limit = parseInt(document.getElementById('customer-stats-limit').value) || 20;
+            try {
+                const response = await fetch(`${API_BASE}/orders/stats/by-customer?limit=${limit}`);
+                const stats = await response.json();
+                
+                const container = document.getElementById('customer-stats-container');
+                if (stats.length === 0) {
+                    container.innerHTML = '<p>Không có dữ liệu</p>';
+                    return;
+                }
+                
+                let html = '<table style="width: 100%; border-collapse: collapse;">';
+                html += '<thead><tr style="background: #D2691E; color: white;">';
+                html += '<th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Khách Hàng</th>';
+                html += '<th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Tổng Đơn</th>';
+                html += '<th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Tổng Chi</th>';
+                html += '<th style="padding: 10px; text-align: right; border: 1px solid #ddd;">Trung Bình/Đơn</th>';
+                html += '</tr></thead><tbody>';
+                
+                stats.forEach(stat => {
+                    html += '<tr style="border-bottom: 1px solid #ddd;">';
+                    html += `<td style="padding: 8px; border: 1px solid #ddd;">${stat.customer_name} (ID: ${stat.customer_id})</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${stat.total_orders}</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${new Intl.NumberFormat('vi-VN').format(stat.total_spent)}đ</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${new Intl.NumberFormat('vi-VN').format(stat.avg_order_value)}đ</td>`;
+                    html += '</tr>';
+                });
+                
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                showAlert('Lỗi khi tải thống kê khách hàng: ' + error.message, 'error');
+            }
+        }
+
+        // Load detailed logs
+        async function loadDetailedLogs() {
+            const limit = parseInt(document.getElementById('detailed-logs-limit').value) || 50;
+            try {
+                const response = await fetch(`${API_BASE}/recognition-logs/detailed?limit=${limit}`);
+                const logs = await response.json();
+                
+                const container = document.getElementById('detailed-logs-container');
+                if (logs.length === 0) {
+                    container.innerHTML = '<p>Không có logs nào</p>';
+                    return;
+                }
+                
+                let html = '<table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">';
+                html += '<thead><tr style="background: #D2691E; color: white;">';
+                html += '<th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Thời Gian</th>';
+                html += '<th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Khách Hàng</th>';
+                html += '<th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Chi Nhánh</th>';
+                html += '<th style="padding: 8px; text-align: center; border: 1px solid #ddd;">Kết Quả</th>';
+                html += '<th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Độ Tin Cậy</th>';
+                html += '</tr></thead><tbody>';
+                
+                logs.forEach(log => {
+                    html += '<tr style="border-bottom: 1px solid #ddd;">';
+                    html += `<td style="padding: 8px; border: 1px solid #ddd;">${new Date(log.created_at).toLocaleString('vi-VN')}</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd;">${log.customer_name || 'N/A'} ${log.customer_id ? '(ID: ' + log.customer_id + ')' : ''}</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd;">${log.branch_name || 'N/A'} ${log.branch_id ? '(ID: ' + log.branch_id + ')' : ''}</td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                        <span class="log-status ${log.recognized ? 'success' : 'failed'}" style="padding: 5px 10px; border-radius: 5px; font-size: 0.9em; font-weight: bold;">
+                            ${log.recognized ? '✓ Nhận diện' : '✗ Không nhận diện'}
+                        </span>
+                    </td>`;
+                    html += `<td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${log.confidence || 'N/A'}</td>`;
+                    html += '</tr>';
+                });
+                
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (error) {
+                showAlert('Lỗi khi tải logs chi tiết: ' + error.message, 'error');
+            }
+        }
+
+        // Customer Detail Modal Functions
+        async function showCustomerDetail(customerId) {
+            const modal = document.getElementById('customer-detail-modal');
+            const body = document.getElementById('customer-detail-body');
+            const nameEl = document.getElementById('detail-customer-name');
+            
+            modal.classList.add('show');
+            body.innerHTML = '<p>Đang tải thông tin...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/customers/${customerId}/details`);
+                if (!response.ok) {
+                    throw new Error('Không thể tải thông tin khách hàng');
+                }
+                
+                const data = await response.json();
+                nameEl.textContent = `Chi Tiết: ${data.customer_name}`;
+                
+                let html = '';
+                
+                // Tổng số món đã mua trên tất cả các chi nhánh
+                html += `<div class="detail-section">
+                    <h3>📊 Tổng Quan</h3>
+                    <p><strong>Tổng số món đã mua (tất cả chi nhánh):</strong> ${data.total_items_all_branches} món</p>
+                </div>`;
+                
+                // Các chi nhánh đã tới
+                if (data.branches_visited && data.branches_visited.length > 0) {
+                    html += `<div class="detail-section">
+                        <h3>🏢 Các Chi Nhánh Đã Tới</h3>`;
+                    
+                    data.branches_visited.forEach(branch => {
+                        html += `<div class="branch-item">
+                            <h4>${branch.branch_name} (ID: ${branch.branch_id})</h4>
+                            <p><strong>Số đơn hàng:</strong> ${branch.orders_count}</p>
+                            <p><strong>Tổng số món đã mua:</strong> ${branch.items_count} món</p>
+                            <p><strong>Tổng tiền:</strong> ${formatPrice(branch.total_amount)} đ</p>
+                            <p><strong>Danh sách món đã mua:</strong></p>
+                            <ul class="items-list">`;
+                        
+                        branch.items_list.forEach(item => {
+                            html += `<li>${item.name} - Số lượng: ${item.quantity}</li>`;
+                        });
+                        
+                        html += `</ul></div>`;
+                    });
+                    
+                    html += `</div>`;
+                } else {
+                    html += `<div class="detail-section">
+                        <h3>🏢 Các Chi Nhánh Đã Tới</h3>
+                        <p>Khách hàng chưa có đơn hàng nào.</p>
+                    </div>`;
+                }
+                
+                // Timeline các lần đến
+                if (data.visit_timeline && data.visit_timeline.length > 0) {
+                    html += `<div class="detail-section">
+                        <h3>📅 Lịch Sử Các Lần Đến</h3>`;
+                    
+                    data.visit_timeline.forEach(visit => {
+                        const visitDate = new Date(visit.date);
+                        const dateStr = visitDate.toLocaleString('vi-VN', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        
+                        html += `<div class="timeline-item">
+                            <div class="timeline-date">${dateStr}</div>
+                            <p><strong>Chi nhánh:</strong> ${visit.branch_name}</p>
+                            <p><strong>Tổng tiền:</strong> ${formatPrice(visit.total_amount)} đ</p>
+                            <p><strong>Các món đã mua:</strong></p>
+                            <ul class="items-list">`;
+                        
+                        visit.items.forEach(item => {
+                            html += `<li>${item.name} x${item.quantity} - ${formatPrice(item.price * item.quantity)} đ</li>`;
+                        });
+                        
+                        html += `</ul></div>`;
+                    });
+                    
+                    html += `</div>`;
+                }
+                
+                // Combo thường mua
+                if (data.frequent_combos && data.frequent_combos.length > 0) {
+                    html += `<div class="detail-section">
+                        <h3>🍽️ Combo Thường Mua</h3>`;
+                    
+                    data.frequent_combos.forEach(combo => {
+                        html += `<div class="combo-item">
+                            <div class="combo-items">${combo.items.join(', ')}</div>
+                            <span class="combo-frequency">${combo.frequency} lần</span>
+                        </div>`;
+                    });
+                    
+                    html += `</div>`;
+                }
+                
+                body.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading customer details:', error);
+                body.innerHTML = `<p style="color: red;">Lỗi khi tải thông tin: ${error.message}</p>`;
+            }
+        }
+        
+        function closeCustomerDetail() {
+            const modal = document.getElementById('customer-detail-modal');
+            modal.classList.remove('show');
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('customer-detail-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCustomerDetail();
+            }
+        });
+        
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN').format(price);
+        }
+
+        // Initialize
+        loadBranches();
+        loadCustomers();
+        loadLogs();
+        setInterval(loadLogs, 5000); // Auto refresh logs every 5 seconds
+    </script>
+</body>
+</html>

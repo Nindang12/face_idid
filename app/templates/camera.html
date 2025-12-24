@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nhận Diện Khách Hàng Bằng Camera - Chi Nhánh</title>
+    <style>
+        /* ...giữ nguyên phần style không thay đổi... */
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #f4f1ea;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+        }
+        h1 {
+            margin-top: 0;
+            color: #5a3e2b;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        label {
+            font-weight: 600;
+            color: #333;
+        }
+        select, button, input {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+        button {
+            background: #8B4513;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover:not(:disabled) {
+            background: #6B3413;
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: 2fr 1.2fr;
+            gap: 20px;
+            margin-top: 16px;
+        }
+        video, canvas {
+            width: 100%;
+            border-radius: 12px;
+            background: #000;
+        }
+        #status {
+            margin-top: 8px;
+            font-size: 14px;
+            color: #555;
+        }
+        .result-box {
+            background: #faf7f2;
+            border-radius: 12px;
+            padding: 12px;
+            border: 1px solid #e0d6c7;
+            max-height: 360px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-ok {
+            background: #d4edda;
+            color: #155724;
+        }
+        .badge-fail {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        /* Modal Menu Thanh Toán */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal-content {
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0d6c7;
+        }
+        .modal-header h2 {
+            margin: 0;
+            color: #5a3e2b;
+        }
+        .close-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .close-btn:hover {
+            background: #c82333;
+        }
+        .customer-info {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .customer-info p {
+            margin: 4px 0;
+            color: #333;
+        }
+        .menu-section {
+            margin-bottom: 20px;
+        }
+        .menu-section h3 {
+            color: #8B4513;
+            margin-bottom: 12px;
+            font-size: 18px;
+        }
+        .menu-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid #e0d6c7;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background: #faf7f2;
+        }
+        .menu-item-info {
+            flex: 1;
+        }
+        .menu-item-name {
+            font-weight: 600;
+            color: #5a3e2b;
+            margin-bottom: 4px;
+        }
+        .menu-item-price {
+            color: #8B4513;
+            font-size: 14px;
+        }
+        .menu-item-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .quantity-btn {
+            background: #8B4513;
+            color: white;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .quantity-btn:hover {
+            background: #6B3413;
+        }
+        .quantity-input {
+            width: 50px;
+            text-align: center;
+            border: 1px solid #ccc;
+            padding: 6px;
+        }
+        .total-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e0d6c7;
+        }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        .total-final {
+            font-size: 24px;
+            font-weight: bold;
+            color: #8B4513;
+            margin-top: 12px;
+        }
+        .payment-btn {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+        .payment-btn:hover {
+            background: #218838;
+        }
+        .payment-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        /* Frequent Combos Styles */
+        .combo-card {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border: 2px solid #ffc107;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .combo-card:hover {
+            background: #fff9e6;
+            transform: translateX(5px);
+        }
+        .combo-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .combo-items-list {
+            color: #555;
+            font-size: 0.9em;
+            margin: 0;
+        }
+        .combo-frequency-badge {
+            background: #ffc107;
+            color: #856404;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>Nhận Diện Khách Hàng Bằng Camera Tại Chi Nhánh</h1>
+            <p>Trang này dùng camera của máy hiện tại để nhận diện khách hàng theo chi nhánh.</p>
+
+            <div class="controls">
+                <div>
+                    <label for="branch-select">Chi nhánh:</label>
+                    <select id="branch-select">
+                        <option value="">-- Chọn chi nhánh --</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="interval">Chu kỳ (ms):</label>
+                    <input id="interval" type="number" value="2000" min="500" step="500" style="width: 90px;" />
+                </div>
+                <button id="btn-start">Bắt đầu camera</button>
+                <button id="btn-stop" disabled>Dừng</button>
+            </div>
+
+            <div id="status">Chưa khởi động.</div>
+
+            <div class="layout">
+                <div>
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas" style="display:none;"></canvas>
+                </div>
+                <div class="result-box">
+                    <div id="result-header"></div>
+                    <pre id="result-json"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Menu Thanh Toán -->
+    <div id="payment-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🍽️ Menu Thanh Toán</h2>
+                <button class="close-btn" onclick="closePaymentModal()">✕ Đóng</button>
+            </div>
+            <div id="customer-info-display" class="customer-info"></div>
+            <div id="frequent-combos-container" style="display: none; margin-bottom: 20px; padding: 15px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
+                <h3 style="margin-top: 0; color: #856404;">⭐ Combo Thường Mua</h3>
+                <div id="frequent-combos-list"></div>
+            </div>
+            <div id="menu-container"></div>
+            <div class="total-section">
+                <div class="total-row">
+                    <span>Tổng tiền:</span>
+                    <span id="total-amount" class="total-final">0 đ</span>
+                </div>
+                <button id="btn-payment" class="payment-btn" onclick="processPayment()">
+                    💳 Thanh Toán
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        // Menu mặc định với giá cả
+        const DEFAULT_MENU = [
+            { id: 1, name: "Cà phê đen", price: 25000, category: "Cà phê" },
+            { id: 2, name: "Cà phê sữa", price: 30000, category: "Cà phê" },
+            { id: 3, name: "Cà phê sữa đá", price: 30000, category: "Cà phê" },
+            { id: 4, name: "Cappuccino", price: 45000, category: "Cà phê" },
+            { id: 5, name: "Latte", price: 50000, category: "Cà phê" },
+            { id: 6, name: "Espresso", price: 35000, category: "Cà phê" },
+            { id: 7, name: "Americano", price: 40000, category: "Cà phê" },
+            { id: 8, name: "Bạc xỉu", price: 35000, category: "Cà phê" },
+            { id: 9, name: "Nước cam ép", price: 40000, category: "Nước ép" },
+            { id: 10, name: "Nước chanh dây", price: 35000, category: "Nước ép" },
+            { id: 11, name: "Sinh tố dưa hấu", price: 45000, category: "Sinh tố" },
+            { id: 12, name: "Sinh tố bơ", price: 50000, category: "Sinh tố" },
+            { id: 13, name: "Trà đá", price: 15000, category: "Trà" },
+            { id: 14, name: "Trà sữa", price: 35000, category: "Trà" },
+            { id: 15, name: "Bánh mì pate", price: 25000, category: "Bánh" },
+            { id: 16, name: "Bánh mì thịt nướng", price: 35000, category: "Bánh" },
+            { id: 17, name: "Bánh ngọt", price: 30000, category: "Bánh" },
+            { id: 18, name: "Bánh croissant", price: 40000, category: "Bánh" }
+        ];
+
+        const branchSelect = document.getElementById('branch-select');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const btnStart = document.getElementById('btn-start');
+        const btnStop = document.getElementById('btn-stop');
+        const statusEl = document.getElementById('status');
+        const intervalInput = document.getElementById('interval');
+        const resultHeader = document.getElementById('result-header');
+        const resultJson = document.getElementById('result-json');
+        const paymentModal = document.getElementById('payment-modal');
+        const customerInfoDisplay = document.getElementById('customer-info-display');
+        const menuContainer = document.getElementById('menu-container');
+        const totalAmountEl = document.getElementById('total-amount');
+
+        let stream = null;
+        let timerId = null;
+        let isPaymentModalOpen = false;
+        let isProcessingNewCustomer = false; // Flag để track khi đang xử lý khách mới
+        let currentCustomer = null;
+        let currentBranchId = null;
+        let selectedItems = {}; // { itemId: { name, price, quantity } }
+        let paymentDelayTimeoutId = null; // Thêm biến timeout cho delay sau thanh toán
+
+        async function loadBranches() {
+            try {
+                const res = await fetch(`${API_BASE}/branches/`);
+                const branches = await res.json();
+                branchSelect.innerHTML = '<option value="">-- Chọn chi nhánh --</option>';
+                branches.forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = b.id;
+                    opt.textContent = `${b.name}${b.location ? ' - ' + b.location : ''}`;
+                    branchSelect.appendChild(opt);
+                });
+            } catch (e) {
+                console.error(e);
+                statusEl.textContent = 'Lỗi tải danh sách chi nhánh: ' + e.message;
+            }
+        }
+
+        async function startCamera() {
+            if (!branchSelect.value) {
+                alert('Vui lòng chọn chi nhánh trước.');
+                return;
+            }
+
+            // Kiểm tra hỗ trợ getUserMedia
+            const hasMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+            if (!hasMediaDevices) {
+                let note = 'Trình duyệt không hỗ trợ navigator.mediaDevices.getUserMedia.\n';
+                note += '- Hãy thử mở trang bằng Chrome/Edge mới.\n';
+                note += '- Nếu đang truy cập qua IP (ví dụ 192.168.x.x), hãy thử mở bằng localhost trên chính máy đó.\n';
+                statusEl.textContent = 'Không truy cập được camera: ' + note.replace(/\n/g, ' ');
+                alert(note);
+                return;
+            }
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                statusEl.textContent = 'Camera đã bật. Đang chụp và gửi ảnh định kỳ...';
+                btnStart.disabled = true;
+                btnStop.disabled = false;
+                startSending();
+            } catch (e) {
+                console.error(e);
+                statusEl.textContent = 'Không truy cập được camera: ' + e.message;
+            }
+        }
+
+        function stopCamera() {
+            if (timerId) {
+                clearInterval(timerId);
+                timerId = null;
+            }
+            if (paymentDelayTimeoutId) {
+                clearTimeout(paymentDelayTimeoutId);
+                paymentDelayTimeoutId = null;
+            }
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+                stream = null;
+            }
+            video.srcObject = null;
+            btnStart.disabled = false;
+            btnStop.disabled = true;
+            statusEl.textContent = 'Đã dừng camera.';
+        }
+
+        function pauseStreaming() {
+            if (timerId) {
+                clearInterval(timerId);
+                timerId = null;
+            }
+        }
+
+        function resumeStreaming() {
+            // Chỉ resume khi không có modal mở, không đang xử lý khách mới, và không có delay timeout
+            if (stream && !isPaymentModalOpen && !isProcessingNewCustomer && !paymentDelayTimeoutId) {
+                startSending();
+            }
+        }
+
+        async function captureAndSend() {
+            // Không gửi khi đang mở modal thanh toán hoặc đang xử lý khách mới
+            if (isPaymentModalOpen || isProcessingNewCustomer || !stream || !branchSelect.value) return;
+
+            const branchId = branchSelect.value;
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(async (blob) => {
+                if (!blob) return;
+
+                const formData = new FormData();
+                formData.append('image', blob, 'frame.jpg');
+                formData.append('use_spark', 'false');
+
+                try {
+                    const res = await fetch(`${API_BASE}/branches/${branchId}/recognize`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+
+                    // Xử lý trường hợp không có face trong ảnh
+                    if (data.status === 'no_face') {
+                        resultHeader.innerHTML = `
+                            <span class="badge badge-fail">KHÔNG PHÁT HIỆN KHUÔN MẶT</span>
+                            &nbsp;
+                            Chi nhánh: ${branchSelect.options[branchSelect.selectedIndex].text}
+                        `;
+                        resultJson.textContent = JSON.stringify(data, null, 2);
+                        statusEl.textContent = data.message || 'Không phát hiện khuôn mặt trong ảnh.';
+                        return; // Không làm gì thêm
+                    }
+
+                    const recognized = data.recognized && (data.status === 'recognized' || data.status === 'processing_new_customer');
+                    const isRecognized = data.recognized && data.status === 'recognized';
+                    const isProcessingNew = data.status === 'processing_new_customer';
+                    
+                    resultHeader.innerHTML = `
+                        <span class="badge ${isRecognized ? 'badge-ok' : (isProcessingNew ? 'badge-ok' : 'badge-fail')}">
+                            ${isRecognized ? 'ĐÃ NHẬN DIỆN' : (isProcessingNew ? 'ĐANG XỬ LÝ KHÁCH MỚI' : 'KHÔNG NHẬN DIỆN')}
+                        </span>
+                        &nbsp;
+                        Chi nhánh: ${branchSelect.options[branchSelect.selectedIndex].text}
+                    `;
+                    resultJson.textContent = JSON.stringify(data, null, 2);
+                    
+                    // Xử lý trường hợp đang xử lý khách mới (tạo customer mới)
+                    if (isProcessingNew && data.customer) {
+                        // Tạm dừng streaming để xử lý khách mới
+                        isProcessingNewCustomer = true;
+                        pauseStreaming();
+                        statusEl.textContent = 'Đang xử lý khách hàng mới...';
+                        
+                        // Mở modal thanh toán
+                        currentCustomer = data.customer;
+                        currentBranchId = branchId;
+                        openPaymentModal(data);
+                    }
+                    // Xử lý trường hợp nhận diện được khách cũ
+                    else if (isRecognized && data.customer) {
+                        // Kiểm tra xem đã mở modal cho khách này chưa
+                        if (!isPaymentModalOpen || (currentCustomer && currentCustomer.id !== data.customer.id)) {
+                            currentCustomer = data.customer;
+                            currentBranchId = branchId;
+                            openPaymentModal(data);
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                    statusEl.textContent = 'Lỗi gửi ảnh: ' + e.message;
+                }
+            }, 'image/jpeg', 0.8);
+        }
+
+        function startSending() {
+            const interval = Number(intervalInput.value) || 2000;
+            if (timerId) clearInterval(timerId);
+            timerId = setInterval(captureAndSend, interval);
+        }
+
+        function openPaymentModal(recognitionData) {
+            isPaymentModalOpen = true;
+            pauseStreaming();
+            
+            // Hiển thị thông tin khách hàng
+            const customer = recognitionData.customer;
+            customerInfoDisplay.innerHTML = `
+                <p><strong>Khách hàng:</strong> ${customer.name} (ID: ${customer.id})</p>
+                <p><strong>Điện thoại:</strong> ${customer.phone || 'N/A'}</p>
+                <p><strong>Email:</strong> ${customer.email || 'N/A'}</p>
+                ${recognitionData.stats ? `
+                    <p><strong>Tổng đơn hàng:</strong> ${recognitionData.stats.total_orders}</p>
+                    <p><strong>Món yêu thích:</strong> ${recognitionData.stats.favorite_items.length > 0 ? recognitionData.stats.favorite_items[0].name : 'Chưa có'}</p>
+                ` : ''}
+            `;
+
+            // Reset selected items
+            selectedItems = {};
+            
+            // Hiển thị frequent combos (chỉ nếu không phải khách mới và có combos)
+            const combosContainer = document.getElementById('frequent-combos-container');
+            const combosList = document.getElementById('frequent-combos-list');
+            if (recognitionData.frequent_combos && recognitionData.frequent_combos.length > 0 && !recognitionData.auto_registered) {
+                combosContainer.style.display = 'block';
+                combosList.innerHTML = '';
+                recognitionData.frequent_combos.forEach(combo => {
+                    const comboCard = document.createElement('div');
+                    comboCard.className = 'combo-card';
+                    comboCard.onclick = () => addComboToCart(combo.items);
+                    comboCard.innerHTML = `
+                        <div class="combo-header">
+                            <div class="combo-items-list">${combo.items.join(', ')}</div>
+                            <span class="combo-frequency-badge">${combo.frequency} lần</span>
+                        </div>
+                        <div style="font-size: 0.85em; color: #666; margin-top: 5px;">👆 Click để thêm vào giỏ hàng</div>
+                    `;
+                    combosList.appendChild(comboCard);
+                });
+            } else {
+                combosContainer.style.display = 'none';
+            }
+            
+            // Hiển thị menu
+            renderMenu();
+            
+            // Hiển thị modal
+            paymentModal.classList.add('show');
+            
+            // Cập nhật status
+            statusEl.textContent = 'Đã nhận diện khách hàng. Đang chờ thanh toán...';
+        }
+        
+        function addComboToCart(comboItems) {
+            // Tìm các món trong DEFAULT_MENU và thêm vào giỏ hàng
+            comboItems.forEach(itemName => {
+                const menuItem = DEFAULT_MENU.find(m => m.name === itemName);
+                if (menuItem) {
+                    if (!selectedItems[menuItem.id]) {
+                        selectedItems[menuItem.id] = {
+                            name: menuItem.name,
+                            price: menuItem.price,
+                            quantity: 0
+                        };
+                    }
+                    selectedItems[menuItem.id].quantity++;
+                }
+            });
+            
+            // Cập nhật UI
+            renderMenu();
+            updateTotal();
+            
+            // Hiển thị thông báo
+            alert(`Đã thêm combo "${comboItems.join(', ')}" vào giỏ hàng!`);
+        }
+
+        function closePaymentModal() {
+            isPaymentModalOpen = false;
+            isProcessingNewCustomer = false; // Clear flag xử lý khách mới
+            paymentModal.classList.remove('show');
+            selectedItems = {};
+
+            // Đợi 5s rồi mới resume streaming!
+            statusEl.textContent = 'Đang chuẩn bị camera, vui lòng chờ khoảng 5 giây trước khi nhận diện tiếp...';
+            if (paymentDelayTimeoutId) clearTimeout(paymentDelayTimeoutId);
+            paymentDelayTimeoutId = setTimeout(() => {
+                paymentDelayTimeoutId = null;
+                resumeStreaming();
+                statusEl.textContent = 'Camera đã bật. Đang chụp và gửi ảnh định kỳ...';
+            }, 5000);
+        }
+
+        function renderMenu() {
+            // Nhóm menu theo category
+            const menuByCategory = {};
+            DEFAULT_MENU.forEach(item => {
+                if (!menuByCategory[item.category]) {
+                    menuByCategory[item.category] = [];
+                }
+                menuByCategory[item.category].push(item);
+            });
+
+            let html = '';
+            Object.keys(menuByCategory).sort().forEach(category => {
+                html += `<div class="menu-section">`;
+                html += `<h3>${category}</h3>`;
+                menuByCategory[category].forEach(item => {
+                    const quantity = selectedItems[item.id]?.quantity || 0;
+                    html += `
+                        <div class="menu-item">
+                            <div class="menu-item-info">
+                                <div class="menu-item-name">${item.name}</div>
+                                <div class="menu-item-price">${formatPrice(item.price)} đ</div>
+                            </div>
+                            <div class="menu-item-controls">
+                                <button class="quantity-btn" onclick="decreaseQuantity(${item.id})">−</button>
+                                <input type="number" class="quantity-input" id="qty-${item.id}" 
+                                    value="${quantity}" min="0" 
+                                    onchange="updateQuantity(${item.id}, this.value)">
+                                <button class="quantity-btn" onclick="increaseQuantity(${item.id})">+</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+            });
+            menuContainer.innerHTML = html;
+            updateTotal();
+        }
+
+        function increaseQuantity(itemId) {
+            const item = DEFAULT_MENU.find(i => i.id === itemId);
+            if (!item) return;
+            
+            if (!selectedItems[itemId]) {
+                selectedItems[itemId] = {
+                    name: item.name,
+                    price: item.price,
+                    quantity: 0
+                };
+            }
+            selectedItems[itemId].quantity++;
+            document.getElementById(`qty-${itemId}`).value = selectedItems[itemId].quantity;
+            updateTotal();
+        }
+
+        function decreaseQuantity(itemId) {
+            if (!selectedItems[itemId] || selectedItems[itemId].quantity <= 0) return;
+            
+            selectedItems[itemId].quantity--;
+            if (selectedItems[itemId].quantity === 0) {
+                delete selectedItems[itemId];
+            }
+            document.getElementById(`qty-${itemId}`).value = selectedItems[itemId].quantity || 0;
+            updateTotal();
+        }
+
+        function updateQuantity(itemId, value) {
+            const quantity = parseInt(value) || 0;
+            const item = DEFAULT_MENU.find(i => i.id === itemId);
+            if (!item) return;
+            
+            if (quantity > 0) {
+                if (!selectedItems[itemId]) {
+                    selectedItems[itemId] = {
+                        name: item.name,
+                        price: item.price,
+                        quantity: 0
+                    };
+                }
+                selectedItems[itemId].quantity = quantity;
+            } else {
+                delete selectedItems[itemId];
+            }
+            updateTotal();
+        }
+
+        function updateTotal() {
+            let total = 0;
+            Object.values(selectedItems).forEach(item => {
+                total += item.price * item.quantity;
+            });
+            totalAmountEl.textContent = formatPrice(total) + ' đ';
+            
+            // Enable/disable payment button
+            const btnPayment = document.getElementById('btn-payment');
+            btnPayment.disabled = total === 0;
+        }
+
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN').format(price);
+        }
+
+        async function processPayment() {
+            if (!currentCustomer || !currentBranchId) {
+                alert('Lỗi: Không có thông tin khách hàng hoặc chi nhánh.');
+                return;
+            }
+
+            const items = Object.values(selectedItems)
+                .filter(item => item.quantity > 0)
+                .map(item => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: item.price
+                }));
+
+            if (items.length === 0) {
+                alert('Vui lòng chọn ít nhất một món.');
+                return;
+            }
+
+            const totalAmount = Object.values(selectedItems).reduce((sum, item) => {
+                return sum + (item.price * item.quantity);
+            }, 0);
+
+            // Disable button during processing
+            const btnPayment = document.getElementById('btn-payment');
+            btnPayment.disabled = true;
+            btnPayment.textContent = 'Đang xử lý...';
+
+            try {
+                const formData = new FormData();
+                formData.append('customer_id', currentCustomer.id);
+                formData.append('branch_id', currentBranchId);
+                formData.append('items', JSON.stringify(items));
+                formData.append('total_amount', totalAmount);
+
+                const response = await fetch(`${API_BASE}/orders/`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(`✅ Thanh toán thành công!\n\nĐơn hàng #${result.id}\nTổng tiền: ${formatPrice(totalAmount)} đ`);
+                    closePaymentModal();
+                } else {
+                    alert('Lỗi thanh toán: ' + (result.detail || 'Không thể tạo đơn hàng'));
+                    btnPayment.disabled = false;
+                    btnPayment.textContent = '💳 Thanh Toán';
+                }
+            } catch (error) {
+                console.error('Payment error:', error);
+                alert('Lỗi kết nối: ' + error.message);
+                btnPayment.disabled = false;
+                btnPayment.textContent = '💳 Thanh Toán';
+            }
+        }
+
+        btnStart.addEventListener('click', startCamera);
+        btnStop.addEventListener('click', stopCamera);
+        intervalInput.addEventListener('change', () => {
+            if (timerId && !isPaymentModalOpen && !paymentDelayTimeoutId) startSending();
+        });
+
+        // Đóng modal khi click ra ngoài
+        paymentModal.addEventListener('click', (e) => {
+            if (e.target === paymentModal) {
+                closePaymentModal();
+            }
+        });
+
+        loadBranches();
+    </script>
+</body>
+</html>

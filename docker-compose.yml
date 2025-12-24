@@ -1,0 +1,134 @@
+networks:
+  faceid-network:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: faceid-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-faceid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-faceid123}
+      POSTGRES_DB: ${POSTGRES_DB:-faceid}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - faceid-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U faceid"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - faceid-network
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: faceid-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@faceid.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - faceid-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      # Cấu hình để các worker từ xa có thể kết nối
+      # Thay đổi localhost thành IP máy chủ (192.168.80.147) hoặc 0.0.0.0
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_ADVERTISED_HOST:-192.168.80.147}:9092,PLAINTEXT_INTERNAL://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    networks:
+      - faceid-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    networks:
+      - faceid-network
+
+  spark-master:
+    image: apache/spark:4.0.0
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "7077:7077"
+      - "8081:8081"
+    networks:
+      - faceid-network
+
+  spark-worker:
+    image: apache/spark:4.0.0
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://master:7077
+    depends_on:
+      - spark-master
+    networks:
+      - faceid-network
+
+  web:
+    build: .
+    container_name: faceid-web
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      # Kết nối Kafka nội bộ trong Docker network
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPARK_MASTER: ${SPARK_MASTER:-spark://192.168.80.147:7077}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-faceid}:${POSTGRES_PASSWORD:-faceid123}@postgres:5432/${POSTGRES_DB:-faceid}
+      UPLOAD_DIR: /code/app/uploads
+      KNOWN_FACES_DIR: /code/app/known_faces
+    volumes:
+      - ./app:/code/app
+      - ./uploads:/code/app/uploads
+      - ./known_faces:/code/app/known_faces
+    networks:
+      - faceid-network
+
+volumes:
+  postgres_data:
