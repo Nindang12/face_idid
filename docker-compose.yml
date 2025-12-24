@@ -61,9 +61,10 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
       # Cấu hình để các worker từ xa có thể kết nối
-      # Thay đổi localhost thành IP máy chủ (192.168.80.147) hoặc 0.0.0.0
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_ADVERTISED_HOST:-192.168.80.147}:9092,PLAINTEXT_INTERNAL://kafka:9092
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:9092
+      # Sử dụng HOST_IP từ .env hoặc KAFKA_ADVERTISED_HOST
+      # PLAINTEXT_INTERNAL phải dùng port khác (9093) để tránh conflict
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_ADVERTISED_HOST:-${HOST_IP:-192.168.1.7}}:9092,PLAINTEXT_INTERNAL://kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:9093
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -84,28 +85,6 @@ services:
     networks:
       - faceid-network
 
-  spark-master:
-    image: apache/spark:4.0.0
-    container_name: spark-master
-    environment:
-      - SPARK_MODE=master
-    ports:
-      - "7077:7077"
-      - "8081:8081"
-    networks:
-      - faceid-network
-
-  spark-worker:
-    image: apache/spark:4.0.0
-    container_name: spark-worker
-    environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://master:7077
-    depends_on:
-      - spark-master
-    networks:
-      - faceid-network
-
   web:
     build: .
     container_name: faceid-web
@@ -119,7 +98,7 @@ services:
     environment:
       # Kết nối Kafka nội bộ trong Docker network
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPARK_MASTER: ${SPARK_MASTER:-spark://192.168.80.147:7077}
+      SPARK_MASTER: ${SPARK_MASTER:-spark://${HOST_IP:-192.168.1.7}:7077}
       DATABASE_URL: postgresql://${POSTGRES_USER:-faceid}:${POSTGRES_PASSWORD:-faceid123}@postgres:5432/${POSTGRES_DB:-faceid}
       UPLOAD_DIR: /code/app/uploads
       KNOWN_FACES_DIR: /code/app/known_faces

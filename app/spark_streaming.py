@@ -1,11 +1,12 @@
 """
 Spark Streaming Application cho Face Recognition
-Chạy độc lập hoặc trong Docker container
+Sử dụng Spark đã cài trên máy host và lưu dữ liệu lên Hadoop HDFS
 """
 import os
 import sys
 import json
 import logging
+from datetime import datetime
 from kafka import KafkaConsumer
 from app.face_recognition_service import FaceRecognitionService
 from app.config import settings
@@ -14,11 +15,95 @@ from app.database import SessionLocal, Customer, Order
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def save_to_hadoop(data, hdfs_path):
+    """
+    Lưu dữ liệu lên Hadoop HDFS
+    Sử dụng hdfs3 hoặc pyarrow để kết nối với HDFS
+    """
+    try:
+        # Cách 1: Sử dụng hdfs3
+        try:
+            from hdfs3 import HDFileSystem
+            hdfs_host = settings.HDFS_NAMENODE.split('://')[1].split(':')[0]
+            hdfs_port = int(settings.HDFS_NAMENODE.split(':')[-1])
+            
+            hdfs = HDFileSystem(host=hdfs_host, port=hdfs_port)
+            
+            # Tạo thư mục nếu chưa có
+            dir_path = os.path.dirname(hdfs_path)
+            if not hdfs.exists(dir_path):
+                hdfs.mkdir(dir_path)
+            
+            # Lưu dữ liệu
+            with hdfs.open(hdfs_path, 'wb') as f:
+                if isinstance(data, dict):
+                    f.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
+                else:
+                    f.write(str(data).encode('utf-8'))
+            
+            logger.info(f"✅ Data saved to HDFS: {hdfs_path}")
+            return True
+            
+        except ImportError:
+            # Cách 2: Sử dụng pyarrow (nếu hdfs3 không có)
+            try:
+                import pyarrow.fs as pafs
+                filesystem = pafs.HadoopFileSystem.from_uri(settings.HDFS_NAMENODE)
+                
+                # Tạo thư mục nếu chưa có
+                dir_path = os.path.dirname(hdfs_path)
+                try:
+                    file_info = filesystem.get_file_info(dir_path)
+                    if file_info.type != pafs.FileType.Directory:
+                        filesystem.create_dir(dir_path, recursive=True)
+                except:
+                    filesystem.create_dir(dir_path, recursive=True)
+                
+                # Lưu dữ liệu
+                with filesystem.open_output_stream(hdfs_path) as f:
+                    if isinstance(data, dict):
+                        f.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
+                    else:
+                        f.write(str(data).encode('utf-8'))
+                
+                logger.info(f"✅ Data saved to HDFS: {hdfs_path}")
+                return True
+                
+            except ImportError:
+                # Cách 3: Sử dụng subprocess với hdfs command (nếu có Hadoop CLI)
+                import subprocess
+                import tempfile
+                
+                # Tạo file tạm
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as tmp_file:
+                    json.dump(data, tmp_file, ensure_ascii=False)
+                    tmp_path = tmp_file.name
+                
+                try:
+                    # Upload lên HDFS
+                    cmd = f"hdfs dfs -mkdir -p {os.path.dirname(hdfs_path)}"
+                    subprocess.run(cmd, shell=True, check=True, capture_output=True)
+                    
+                    cmd = f"hdfs dfs -put {tmp_path} {hdfs_path}"
+                    result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
+                    
+                    logger.info(f"✅ Data saved to HDFS: {hdfs_path}")
+                    return True
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"❌ Failed to save to HDFS using hdfs command: {e.stderr}")
+                    return False
+                finally:
+                    os.unlink(tmp_path)
+                    
+    except Exception as e:
+        logger.error(f"❌ Error saving to HDFS: {e}", exc_info=True)
+        return False
+
 def process_with_spark_workers():
     """
-    Xử lý tasks từ Kafka sử dụng Spark workers
-    Đây là phiên bản đơn giản hóa sử dụng Kafka Consumer trực tiếp
-    Để sử dụng Spark thực sự, cần cấu hình Spark Streaming với Kafka
+    Xử lý tasks từ Kafka và lưu dữ liệu lên Hadoop HDFS
+    Sử dụng Kafka Consumer để nhận dữ liệu từ Kafka
+    Sau khi xử lý, lưu kết quả lên HDFS
     """
     face_service = FaceRecognitionService()
     
@@ -32,6 +117,8 @@ def process_with_spark_workers():
     )
     
     logger.info(f"Spark Streaming Consumer started. Listening to topic: {settings.KAFKA_TOPIC_FACE_RECOGNITION}")
+    logger.info(f"HDFS Namenode: {settings.HDFS_NAMENODE}")
+    logger.info(f"HDFS Data Directory: {settings.HDFS_DATA_DIR}")
     
     from kafka import KafkaProducer
     
@@ -76,8 +163,22 @@ def process_with_spark_workers():
                     'result': result,
                     'confidence': confidence,
                     'status': 'completed',
-                    'processed_by': 'spark-worker'
+                    'processed_by': 'spark-worker',
+                    'timestamp': datetime.now().isoformat()
                 }
+                
+                # Lưu kết quả lên Hadoop HDFS
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                date_path = datetime.now().strftime('%Y/%m/%d')
+                hdfs_path = f"{settings.HDFS_DATA_DIR}/recognition_results/{date_path}/result_{task_id}_{timestamp}.json"
+                
+                logger.info(f"💾 Attempting to save to HDFS: {hdfs_path}")
+                save_success = save_to_hadoop(recognition_result, hdfs_path)
+                
+                if save_success:
+                    logger.info(f"✅ Successfully saved task {task_id} to HDFS")
+                else:
+                    logger.warning(f"⚠️  Failed to save task {task_id} to HDFS, but continuing...")
                 
                 # Gửi kết quả về Kafka
                 producer.send(settings.KAFKA_TOPIC_RESULTS, value=recognition_result)
@@ -92,8 +193,16 @@ def process_with_spark_workers():
                     'task_id': task_data.get('task_id', 'unknown'),
                     'status': 'error',
                     'error': str(e),
-                    'processed_by': 'spark-worker'
+                    'processed_by': 'spark-worker',
+                    'timestamp': datetime.now().isoformat()
                 }
+                
+                # Lưu error lên HDFS
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                date_path = datetime.now().strftime('%Y/%m/%d')
+                hdfs_path = f"{settings.HDFS_DATA_DIR}/errors/{date_path}/error_{task_data.get('task_id', 'unknown')}_{timestamp}.json"
+                save_to_hadoop(error_result, hdfs_path)
+                
                 producer.send(settings.KAFKA_TOPIC_RESULTS, value=error_result)
                 producer.flush()
     
@@ -108,6 +217,20 @@ if __name__ == "__main__":
     logger.info("Starting Spark Streaming for Face Recognition")
     logger.info(f"Kafka: {settings.KAFKA_BOOTSTRAP_SERVERS}")
     logger.info(f"Topic: {settings.KAFKA_TOPIC_FACE_RECOGNITION}")
+    logger.info(f"Spark Master: {settings.SPARK_MASTER}")
+    logger.info(f"HDFS Namenode: {settings.HDFS_NAMENODE}")
+    logger.info(f"HDFS Data Dir: {settings.HDFS_DATA_DIR}")
     logger.info("=" * 50)
+    
+    # Kiểm tra kết nối HDFS
+    try:
+        test_path = f"{settings.HDFS_DATA_DIR}/test_connection.json"
+        test_data = {"test": True, "timestamp": datetime.now().isoformat()}
+        if save_to_hadoop(test_data, test_path):
+            logger.info("✅ HDFS connection test successful!")
+        else:
+            logger.warning("⚠️  HDFS connection test failed, but continuing...")
+    except Exception as e:
+        logger.warning(f"⚠️  Could not test HDFS connection: {e}")
     
     process_with_spark_workers()

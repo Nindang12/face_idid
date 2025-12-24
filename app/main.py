@@ -81,7 +81,7 @@ async def camera_page():
     """
     try:
         with open("app/templates/camera.html", "r", encoding="utf-8") as f:
-        return f.read()
+            return f.read()
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="camera.html not found")
 
@@ -139,9 +139,9 @@ async def delete_branch(branch_id: int, db: Session = Depends(get_db)):
     - Sau đó xóa chính bản ghi chi nhánh
     """
     try:
-    branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    if not branch:
-        raise HTTPException(status_code=404, detail="Branch not found")
+        branch = db.query(Branch).filter(Branch.id == branch_id).first()
+        if not branch:
+            raise HTTPException(status_code=404, detail="Branch not found")
 
         # Xóa tất cả orders của chi nhánh này
         orders = db.query(Order).filter(Order.branch_id == branch_id).all()
@@ -157,7 +157,7 @@ async def delete_branch(branch_id: int, db: Session = Depends(get_db)):
 
         # Xóa chi nhánh
         db.delete(branch)
-    db.commit()
+        db.commit()
 
         return {"message": "Branch deleted successfully"}
     except HTTPException:
@@ -713,9 +713,9 @@ async def recognize_face(
 
         # Xử lý trực tiếp
         if branch_id:
-        # Ưu tiên so sánh với khách đã từng đặt hàng tại branch này
+            # Ưu tiên so sánh với khách đã từng đặt hàng tại branch này
             branch_orders = db.query(Order).filter(Order.branch_id == branch_id).all()
-        branch_customer_ids = list({o.customer_id for o in branch_orders})
+            branch_customer_ids = list({o.customer_id for o in branch_orders})
             if branch_customer_ids:
                 result, confidence = face_service.recognize_face_in_branch(
                     str(image_path), 
@@ -740,17 +740,17 @@ async def recognize_face(
 
     customer_id = customer.id if customer else None
         
-        # Lưu log
-        log = RecognitionLog(
-            customer_id=customer_id,
-            branch_id=branch_id,
-            image_path=str(image_path),
-            confidence=str(confidence),
+    # Lưu log
+    log = RecognitionLog(
+        customer_id=customer_id,
+        branch_id=branch_id,
+        image_path=str(image_path),
+        confidence=str(confidence),
         recognized=customer is not None
-        )
-        db.add(log)
-        db.commit()
-        
+    )
+    db.add(log)
+    db.commit()
+    
     if not customer:
         return {
             "task_id": task_id,
@@ -760,43 +760,43 @@ async def recognize_face(
         }
 
     # Đơn hàng gần nhất
-            latest_order = db.query(Order).filter(
+    latest_order = db.query(Order).filter(
         Order.customer_id == customer.id
-            ).order_by(desc(Order.created_at)).first()
-            
-            order_data = None
-            if latest_order:
-                order_data = {
-                    "id": latest_order.id,
-                    "branch_id": latest_order.branch_id,
-                    "items": json.loads(latest_order.items) if latest_order.items else [],
-                    "total_amount": latest_order.total_amount,
-                    "status": latest_order.status,
-                    "created_at": latest_order.created_at.isoformat()
-                }
-            
+    ).order_by(desc(Order.created_at)).first()
+    
+    order_data = None
+    if latest_order:
+        order_data = {
+            "id": latest_order.id,
+            "branch_id": latest_order.branch_id,
+            "items": json.loads(latest_order.items) if latest_order.items else [],
+            "total_amount": latest_order.total_amount,
+            "status": latest_order.status,
+            "created_at": latest_order.created_at.isoformat()
+        }
+    
     stats = _build_customer_stats(db, customer.id, current_branch_id=branch_id)
-            
-            return {
-                "task_id": task_id,
+    
+    return {
+        "task_id": task_id,
         "status": "recognized" if not auto_registered else "auto_registered",
-                "recognized": True,
+        "recognized": True,
         "auto_registered": auto_registered,
-                "customer": {
-                    "id": customer.id,
-                    "name": customer.name,
-                    "phone": customer.phone,
-                    "email": customer.email
-                },
-                "latest_order": order_data,
-                "confidence": confidence,
+        "customer": {
+            "id": customer.id,
+            "name": customer.name,
+            "phone": customer.phone,
+            "email": customer.email
+        },
+        "latest_order": order_data,
+        "confidence": confidence,
         "stats": stats,
         "message": (
             f"Khách hàng mới đã được tạo tự động với ID {customer.id}."
             if auto_registered
             else f"Khách hàng {customer.name} đã được nhận diện."
         )
-            }
+    }
 
 @app.post("/api/branches/{branch_id}/recognize")
 async def recognize_at_branch(
@@ -848,15 +848,15 @@ async def recognize_at_branch(
         }
     
     # Bước 1: So sánh nhanh với customers trong branch này trước
-        branch_orders = db.query(Order).filter(Order.branch_id == branch_id).all()
+    branch_orders = db.query(Order).filter(Order.branch_id == branch_id).all()
     branch_customer_ids = list({o.customer_id for o in branch_orders})
     
     result = None
     confidence = 0.0
-        
-        if branch_customer_ids:
-            result, confidence = face_service.recognize_face_in_branch(
-                str(image_path), 
+    
+    if branch_customer_ids:
+        result, confidence = face_service.recognize_face_in_branch(
+            str(image_path), 
             [str(cid) for cid in branch_customer_ids],
             tolerance=0.6
         )
@@ -900,18 +900,18 @@ async def recognize_at_branch(
             confidence = 0.0
 
     customer_id = customer.id if customer else None
-        
-        # Lưu log
-        log = RecognitionLog(
-            customer_id=customer_id,
-            branch_id=branch_id,
-            image_path=str(image_path),
-            confidence=str(confidence),
+
+    # Lưu log
+    log = RecognitionLog(
+        customer_id=customer_id,
+        branch_id=branch_id,
+        image_path=str(image_path),
+        confidence=str(confidence),
         recognized=customer is not None
-        )
-        db.add(log)
-        db.commit()
-        
+    )
+    db.add(log)
+    db.commit()
+    
     if not customer:
         return {
             "status": "error",
@@ -921,21 +921,21 @@ async def recognize_at_branch(
             "message": "Không thể nhận diện hoặc đăng ký khách hàng từ ảnh này."
         }
 
-            # Lấy thông tin khách và đơn hàng gần nhất
-            latest_order = db.query(Order).filter(
+    # Lấy thông tin khách và đơn hàng gần nhất
+    latest_order = db.query(Order).filter(
         Order.customer_id == customer.id
-            ).order_by(desc(Order.created_at)).first()
-            
-            order_data = None
-            if latest_order:
-                order_data = {
-                    "id": latest_order.id,
-                    "branch_id": latest_order.branch_id,
-                    "items": json.loads(latest_order.items) if latest_order.items else [],
-                    "total_amount": latest_order.total_amount,
-                    "status": latest_order.status,
-                    "created_at": latest_order.created_at.isoformat()
-                }
+    ).order_by(desc(Order.created_at)).first()
+    
+    order_data = None
+    if latest_order:
+        order_data = {
+            "id": latest_order.id,
+            "branch_id": latest_order.branch_id,
+            "items": json.loads(latest_order.items) if latest_order.items else [],
+            "total_amount": latest_order.total_amount,
+            "status": latest_order.status,
+            "created_at": latest_order.created_at.isoformat()
+        }
 
     stats = _build_customer_stats(db, customer.id, current_branch_id=branch_id)
     
@@ -975,29 +975,29 @@ async def recognize_at_branch(
     status = "recognized"
     if auto_registered:
         status = "processing_new_customer"  # Frontend sẽ pause streaming khi nhận status này
-            
-            return {
+    
+    return {
         "status": status,
-                "recognized": True,
+        "recognized": True,
         "auto_registered": auto_registered,
-                "customer": {
-                    "id": customer.id,
-                    "name": customer.name,
-                    "phone": customer.phone,
-                    "email": customer.email
-                },
-                "latest_order": order_data,
-                "confidence": confidence,
+        "customer": {
+            "id": customer.id,
+            "name": customer.name,
+            "phone": customer.phone,
+            "email": customer.email
+        },
+        "latest_order": order_data,
+        "confidence": confidence,
         "stats": stats,
         "frequent_combos": frequent_combos,
-                "branch_id": branch_id,
+        "branch_id": branch_id,
         "branch_name": branch.name,
         "message": (
             f"Khách hàng mới đã được tạo tự động với ID {customer.id} tại chi nhánh {branch.name}. Vui lòng thanh toán."
             if auto_registered
             else f"Khách hàng {customer.name} đã được nhận diện tại chi nhánh {branch.name}."
         )
-            }
+    }
 
 @app.get("/api/logs/")
 async def get_logs(branch_id: Optional[int] = None, limit: int = 50, db: Session = Depends(get_db)):
