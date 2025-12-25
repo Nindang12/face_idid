@@ -14,6 +14,10 @@ Tài liệu này hướng dẫn cách xử lý các lỗi phổ biến trong h�
 6. [Lỗi Face Recognition không nhận diện](#6-lỗi-face-recognition-không-nhận-diện)
 7. [Lỗi Port đã được sử dụng](#7-lỗi-port-đã-được-sử-dụng)
 8. [Lỗi Module không tìm thấy](#8-lỗi-module-không-tìm-thấy)
+9. [Lỗi MinIO Connection](#9-lỗi-minio-connection)
+10. [Lỗi upload_dir is not defined](#10-lỗi-upload_dir-is-not-defined)
+11. [Lỗi SyntaxError: Unexpected token 'I', "Internal S"... is not valid JSON](#11-lỗi-syntaxerror-unexpected-token-i-internal-s-is-not-valid-json)
+12. [Lỗi Branch not found](#12-lỗi-branch-not-found)
 
 ---
 
@@ -408,6 +412,172 @@ print('Import OK')
 
 ---
 
+## 9. Lỗi MinIO Connection
+
+### Triệu chứng:
+```
+minio.error.S3Error: InvalidAccessKeyId
+Connection refused to minio:9000
+Error uploading file to MinIO
+```
+
+### Cách sửa:
+
+#### Bước 1: Kiểm tra MinIO container
+```bash
+docker compose ps minio
+docker compose logs minio
+```
+
+#### Bước 2: Kiểm tra MinIO đang chạy
+```bash
+curl http://localhost:9000/minio/health/live
+```
+
+#### Bước 3: Kiểm tra cấu hình trong .env
+```bash
+cat .env | grep MINIO
+# Đảm bảo có:
+# MINIO_ENDPOINT=192.168.1.7:9000
+# MINIO_ACCESS_KEY=minioadmin
+# MINIO_SECRET_KEY=minioadmin123
+# MINIO_BUCKET_NAME=face-recognition-data
+```
+
+#### Bước 4: Test kết nối MinIO
+```bash
+docker compose exec web python -c "
+from app.minio_service import MinioService
+service = MinioService()
+print('MinIO connected:', service.client is not None)
+buckets = service.client.list_buckets()
+print('Buckets:', [b.name for b in buckets])
+"
+```
+
+#### Bước 5: Restart MinIO
+```bash
+docker compose restart minio
+sleep 10
+docker compose logs minio | tail -20
+```
+
+#### Bước 6: Kiểm tra firewall (nếu từ worker)
+```bash
+sudo ufw allow from 192.168.0.0/16 to any port 9000
+sudo ufw allow from 192.168.0.0/16 to any port 9001
+```
+
+---
+
+## 10. Lỗi upload_dir is not defined
+
+### Triệu chứng:
+```
+NameError: name 'upload_dir' is not defined
+```
+
+### Nguyên nhân:
+- Biến `upload_dir` chưa được định nghĩa trong `app/main.py`
+- Code đã được cập nhật nhưng container chưa được rebuild
+
+### Cách sửa:
+
+#### Bước 1: Kiểm tra code
+```bash
+grep -n "upload_dir = Path" app/main.py
+# Phải có dòng: upload_dir = Path(settings.UPLOAD_DIR)
+```
+
+#### Bước 2: Rebuild container
+```bash
+docker compose stop web
+docker compose rm -f web
+docker compose build --no-cache web
+docker compose up -d web
+```
+
+#### Bước 3: Kiểm tra logs
+```bash
+docker compose logs web | grep -i "upload_dir\|error"
+```
+
+---
+
+## 11. Lỗi SyntaxError: Unexpected token 'I', "Internal S"... is not valid JSON
+
+### Triệu chứng:
+- Frontend cố parse response không phải JSON (HTML error page) như JSON
+- Lỗi trong console: `SyntaxError: Unexpected token 'I', "Internal S"... is not valid JSON`
+
+### Nguyên nhân:
+- Backend trả về HTTP 500 Internal Server Error với HTML response
+- Frontend cố parse response đó như JSON
+- Thiếu error handling trong frontend
+
+### Cách sửa:
+
+#### Bước 1: Kiểm tra backend logs
+```bash
+docker compose logs web | grep -i "error\|exception\|traceback" -A 10
+```
+
+#### Bước 2: Sửa lỗi backend (nếu có)
+- Xem logs để tìm lỗi cụ thể
+- Sửa lỗi trong code backend
+- Restart web service
+
+#### Bước 3: Frontend đã có error handling
+- Code đã được cập nhật để kiểm tra `response.ok` và `content-type` trước khi parse JSON
+- Nếu vẫn gặp lỗi, clear browser cache và hard refresh
+
+#### Bước 4: Test API trực tiếp
+```bash
+curl -v http://localhost:8000/api/branches/1
+# Kiểm tra response có phải JSON không
+```
+
+---
+
+## 12. Lỗi Branch not found
+
+### Triệu chứng:
+```
+{"detail": "Branch not found"}
+```
+
+### Nguyên nhân:
+- Branch ID không tồn tại trong database
+- Branch đã bị xóa (is_active = false)
+- Frontend đang gửi branch_id sai
+
+### Cách sửa:
+
+#### Bước 1: Kiểm tra branch trong database
+```bash
+docker compose exec postgres psql -U faceid -d faceid -c "
+SELECT id, name, location, is_active FROM branches ORDER BY id;
+"
+```
+
+#### Bước 2: Kiểm tra branch_id đang được gửi
+- Mở Developer Tools (F12) trong browser
+- Xem Network tab khi gọi API
+- Kiểm tra branch_id trong request
+
+#### Bước 3: Lưu ý về location vs id
+- Frontend hiển thị "Nương Hin - 1" (name + location)
+- Nhưng branch_id thực tế có thể là 3 (không phải 1)
+- Luôn sử dụng `branch.id` từ API response, không dùng location
+
+#### Bước 4: Tạo branch mới nếu cần
+- Truy cập http://localhost:8000
+- Vào tab "Quản Lý Chi Nhánh"
+- Tạo chi nhánh mới
+- Lưu lại Branch ID
+
+---
+
 ## 🔍 Các Lệnh Debug Hữu Ích
 
 ### Kiểm tra trạng thái hệ thống:
@@ -453,6 +623,24 @@ docker compose exec kafka kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 \
   --topic face-recognition-tasks \
   --from-beginning
+```
+
+### Kiểm tra MinIO:
+```bash
+# Kiểm tra MinIO đang chạy
+docker compose ps minio
+
+# Xem logs MinIO
+docker compose logs minio
+
+# Test kết nối MinIO
+docker compose exec web python -c "
+from app.minio_service import MinioService
+service = MinioService()
+print('MinIO connected:', service.client is not None)
+files = list(service.list_files(''))
+print('Total files:', len(files))
+"
 ```
 
 ### Clean up:

@@ -1,6 +1,6 @@
 # 🚀 Hướng Dẫn Triển Khai Hệ Thống Phân Tán
 
-Hệ thống nhận diện khuôn mặt cho quán cà phê với kiến trúc phân tán sử dụng Kafka, Spark (cài trên máy host) và Hadoop HDFS để lưu trữ dữ liệu.
+Hệ thống nhận diện khuôn mặt cho quán cà phê với kiến trúc phân tán sử dụng Kafka, Spark (cài trên máy host) và MinIO Object Storage để lưu trữ dữ liệu.
 
 ## 📋 Kiến Trúc Hệ Thống
 
@@ -12,7 +12,7 @@ Hệ thống nhận diện khuôn mặt cho quán cà phê với kiến trúc ph
 │  │   :5433      │  │   :9092      │  │   :7077      │  │
 │  └──────────────┘  └──────────────┘  └──────────────┘  │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │  Web API     │  │  Zookeeper   │  │ Hadoop HDFS  │  │
+│  │  Web API     │  │  Zookeeper   │  │    MinIO     │  │
 │  │  :8000       │  │   :2181      │  │   :9000      │  │
 │  └──────────────┘  └──────────────┘  └──────────────┘  │
 └─────────────────────────────────────────────────────────┘
@@ -23,7 +23,7 @@ Hệ thống nhận diện khuôn mặt cho quán cà phê với kiến trúc ph
 │  Worker1       │            │  Worker3          │
 │                │            │                    │
 │ Spark Worker   │            │ Spark Worker      │
-│ Kafka→HDFS     │            │ Kafka→HDFS       │
+│ Kafka→MinIO    │            │ Kafka→MinIO       │
 │ Face Recog     │            │ Face Recog       │
 └────────────────┘            └───────────────────┘
 ```
@@ -31,36 +31,16 @@ Hệ thống nhận diện khuôn mặt cho quán cà phê với kiến trúc ph
 **Luồng dữ liệu:**
 1. Camera gửi ảnh → Kafka Topic (`face-recognition-tasks`)
 2. Spark Streaming Worker xử lý nhận diện khuôn mặt
-3. Kết quả được lưu lên **Hadoop HDFS** (`/face_recognition/data/`)
+3. Kết quả được lưu lên **MinIO** (`face-recognition-data/`)
 4. Kết quả được gửi về Kafka Topic (`face-recognition-results`)
 
 ## 🖥️ Cấu Hình Máy Chủ Chính
 
 > Ghi chú: 
-> - **Docker**: Chạy PostgreSQL, Kafka, Zookeeper, Web API
+> - **Docker**: Chạy PostgreSQL, Kafka, Zookeeper, Web API, MinIO
 > - **Spark**: Cài đặt trên máy host (không dùng Docker)
-> - **Hadoop**: Cài đặt trên máy host để lưu dữ liệu từ Kafka streaming
+> - **MinIO**: Chạy trong Docker để lưu trữ dữ liệu (images, encodings, logs)
 > - Tất cả máy worker sẽ truy cập API / UI qua IP từ biến môi trường `HOST_IP` (mặc định: `192.168.1.7`)
-
-Một số lệnh hữu ích (tham khảo, không bắt buộc chạy hết một lượt):
-
-```bash
-# Dừng và xóa container web (nếu cần rebuild sạch)
-docker compose stop web
-docker compose rm -f web
-
-# Build lại image web
-docker compose build --no-cache web
-
-# Khởi động lại riêng service web
-docker compose restart web
-
-# Khởi động toàn bộ stack (web + postgres + kafka + spark, ...)
-docker compose up -d --build
-
-# Xem log của web
-docker compose logs --tail=50 web
-```
 
 ### Bước 1: Clone và chuẩn bị
 
@@ -87,10 +67,12 @@ KAFKA_BOOTSTRAP_SERVERS=192.168.1.7:9092
 SPARK_HOME=/opt/spark
 SPARK_MASTER=spark://192.168.1.7:7077
 
-# Hadoop Configuration (cài trên máy host)
-HADOOP_HOME=/opt/hadoop
-HDFS_NAMENODE=hdfs://192.168.1.7:9000
-HDFS_DATA_DIR=/face_recognition/data
+# MinIO Configuration (chạy trong Docker)
+MINIO_ENDPOINT=192.168.1.7:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin123
+MINIO_BUCKET_NAME=face-recognition-data
+MINIO_USE_SSL=false
 
 # Database Configuration
 POSTGRES_PORT=5433  # Cổng PostgreSQL được NAT ra ngoài là 5433
@@ -146,72 +128,25 @@ $SPARK_HOME/sbin/start-master.sh
 # http://${HOST_IP:-192.168.1.7}:8080
 ```
 
-### Bước 6: Cài đặt Hadoop trên máy host
+### Bước 6: Kiểm tra MinIO
 
-> **Lưu ý**: Hadoop cần cài đặt để lưu dữ liệu từ Kafka streaming lên HDFS.
+MinIO đã được cài đặt và chạy trong Docker. Kiểm tra:
 
 ```bash
-# Tải Hadoop (ví dụ Hadoop 3.3.6)
-cd /opt
-sudo wget https://archive.apache.org/dist/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz
-sudo tar -xzf hadoop-3.3.6.tar.gz
-sudo mv hadoop-3.3.6 hadoop
-sudo chown -R $USER:$USER /opt/hadoop
+# Kiểm tra MinIO đang chạy
+docker compose ps minio
 
-# Thêm vào ~/.bashrc hoặc ~/.zshrc
-export HADOOP_HOME=/opt/hadoop
-export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
-export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+# Truy cập MinIO Console
+# http://localhost:9001
+# Username: minioadmin
+# Password: minioadmin123
 
-# Cấu hình Hadoop (đơn giản cho single-node)
-cd $HADOOP_HOME/etc/hadoop
-
-# Lấy HOST_IP từ .env hoặc dùng mặc định
-HOST_IP=${HOST_IP:-192.168.1.7}
-
-# core-site.xml
-cat > core-site.xml << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-    <property>
-        <name>fs.defaultFS</name>
-        <value>hdfs://${HOST_IP}:9000</value>
-    </property>
-</configuration>
-EOF
-
-# hdfs-site.xml
-cat > hdfs-site.xml << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-    <property>
-        <name>dfs.replication</name>
-        <value>1</value>
-    </property>
-    <property>
-        <name>dfs.namenode.name.dir</name>
-        <value>/opt/hadoop/data/namenode</value>
-    </property>
-    <property>
-        <name>dfs.datanode.data.dir</name>
-        <value>/opt/hadoop/data/datanode</value>
-    </property>
-</configuration>
-EOF
-
-# Format HDFS (chỉ chạy lần đầu)
-mkdir -p /opt/hadoop/data/namenode /opt/hadoop/data/datanode
-$HADOOP_HOME/bin/hdfs namenode -format
-
-# Khởi động Hadoop
-$HADOOP_HOME/sbin/start-dfs.sh
-
-# Tạo thư mục trên HDFS cho dữ liệu face recognition
-$HADOOP_HOME/bin/hdfs dfs -mkdir -p /face_recognition/data/recognition_results
-$HADOOP_HOME/bin/hdfs dfs -mkdir -p /face_recognition/data/errors
-
-# Kiểm tra HDFS
-$HADOOP_HOME/bin/hdfs dfs -ls /
+# Kiểm tra bucket đã được tạo tự động
+docker compose exec web python -c "
+from app.minio_service import MinioService
+service = MinioService()
+print('MinIO connected:', service.client is not None)
+"
 ```
 
 ### Bước 7: Kiểm tra services
@@ -222,15 +157,36 @@ Thay `${HOST_IP}` bằng IP thực tế từ file `.env` (mặc định: `192.16
 - **Trang Camera Cho Chi Nhánh**: http://${HOST_IP}:8000/camera
 - **Kafka UI**: http://${HOST_IP}:8080
 - **Spark Master Web UI**: http://${HOST_IP}:8080 (Spark)
-- **Hadoop NameNode Web UI**: http://${HOST_IP}:9870
+- **MinIO Console**: http://${HOST_IP}:9001
+- **PgAdmin**: http://${HOST_IP}:5050
 
 ## 🖥️ Cấu Hình Máy Worker
 
 > Mỗi máy worker đại diện cho **một chi nhánh**.  
 > Máy worker:
-> - Chạy Spark Streaming (`spark_streaming.py`) để xử lý nhận diện phân tán.
-> - Nhận dữ liệu từ Kafka, xử lý nhận diện khuôn mặt, và **lưu kết quả lên Hadoop HDFS**.
-> - Dùng **trình duyệt** để mở `http://${HOST_IP}:8000/camera` và chọn đúng chi nhánh.
+> - Chạy Spark Streaming (`spark_streaming.py`) để xử lý nhận diện phân tán (tùy chọn).
+> - Nhận dữ liệu từ Kafka, xử lý nhận diện khuôn mặt, và **lưu kết quả lên MinIO**.
+> - **Mở camera để nhận diện khách hàng** qua trình duyệt web.
+
+### 📹 Mở Camera Trên Máy Worker
+
+Để sử dụng camera nhận diện trên máy worker:
+
+1. **Mở trình duyệt web** (Chrome, Firefox, Edge) trên máy worker
+2. **Truy cập URL**: `http://${HOST_IP}:8000/camera`
+   - Thay `${HOST_IP}` bằng IP của máy chủ chính (ví dụ: `192.168.1.7`)
+   - Ví dụ: `http://192.168.1.7:8000/camera`
+3. **Cho phép truy cập camera** khi trình duyệt yêu cầu
+4. **Chọn chi nhánh** từ dropdown menu (phải chọn đúng chi nhánh của máy worker này)
+5. **Click "Bắt Đầu"** để bắt đầu streaming và nhận diện
+
+**Lưu ý quan trọng:**
+- Camera chỉ hoạt động trên **HTTPS** hoặc **localhost**
+- Nếu truy cập qua IP (ví dụ: `http://192.168.1.7:8000`), một số trình duyệt có thể chặn camera
+- **Giải pháp**: 
+  - Sử dụng `localhost` nếu máy worker và máy chủ là cùng một máy
+  - Hoặc cấu hình HTTPS/SSL cho web server
+  - Hoặc sử dụng ngrok để tạo HTTPS tunnel: `ngrok http 8000`
 
 ### Trên Worker1 (192.168.80.127, user: nindang)
 
@@ -252,17 +208,14 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-#### Bước 3: Cài đặt Spark và Hadoop trên Worker
+#### Bước 3: Cài đặt Spark trên Worker
 
 ```bash
 # Cài đặt Spark (tương tự như trên máy chủ chính)
 # Xem hướng dẫn ở Bước 5 của máy chủ chính
 
-# Cài đặt Hadoop (nếu cần, hoặc chỉ cần kết nối tới HDFS trên máy chủ chính)
-# Xem hướng dẫn ở Bước 6 của máy chủ chính
-
-# Cài đặt Python libraries cho Hadoop
-pip install hdfs3 pyarrow
+# Cài đặt Python libraries cho MinIO
+pip install minio
 ```
 
 #### Bước 4: Cấu hình worker
@@ -273,7 +226,7 @@ chmod +x setup_worker.sh
 ./setup_worker.sh worker1 1 192.168.1.7  # worker1 với branch_id=1 và host_ip
 
 # Hoặc tạo thủ công file .env
-cp .env.example .env
+   cp .env.example .env
 # Chỉnh sửa .env cho worker1, ví dụ:
 
 # Host IP của máy chủ chính
@@ -287,118 +240,75 @@ KAFKA_BOOTSTRAP_SERVERS=192.168.1.7:9092
 SPARK_HOME=/opt/spark
 SPARK_MASTER=spark://192.168.1.7:7077
 
-# Hadoop Configuration
-HADOOP_HOME=/opt/hadoop  # Đường dẫn Hadoop trên worker (nếu có)
-HDFS_NAMENODE=hdfs://192.168.1.7:9000
-HDFS_DATA_DIR=/face_recognition/data
+# MinIO Configuration
+MINIO_ENDPOINT=192.168.1.7:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin123
+MINIO_BUCKET_NAME=face-recognition-data
+MINIO_USE_SSL=false
 
 # Database Configuration
 DATABASE_URL=postgresql://faceid:faceid123@192.168.1.7:5433/faceid
 
 # Chi nhánh mặc định cho worker1
 DEFAULT_BRANCH_ID=1
-
-# Nếu dùng NFS (xem phần bên dưới)
-UPLOAD_DIR=/mnt/faceid_uploads
-KNOWN_FACES_DIR=/mnt/faceid_known_faces
 ```
 
-#### Bước 5: Tạo thư mục shared storage (nếu dùng NFS hoặc mount)
-
-```bash
-# Nếu dùng NFS hoặc shared mount
-# Mount thư mục từ máy chủ chính
-sudo mount -t nfs 192.168.80.147:/path/to/shared/known_faces ./known_faces
-sudo mount -t nfs 192.168.80.147:/path/to/shared/uploads ./uploads
-
-# Hoặc sử dụng rsync để đồng bộ
-rsync -avz 192.168.80.147:/path/to/known_faces/ ./known_faces/
-```
-
-#### Bước 6: Chạy Spark Streaming Worker
+#### Bước 5: Chạy Spark Streaming Worker (Tùy chọn)
 
 > **Lưu ý**: Spark Streaming sẽ:
 > - Nhận dữ liệu từ Kafka
 > - Xử lý nhận diện khuôn mặt
-> - **Lưu kết quả lên Hadoop HDFS** (`/face_recognition/data/recognition_results/`)
+> - **Lưu kết quả lên MinIO** (`face-recognition-data/recognition_results/`)
 > - Gửi kết quả về Kafka topic results
+> 
+> **Nếu không dùng Spark Streaming**, bạn có thể bỏ qua bước này và chỉ sử dụng camera trực tiếp.
 
 ```bash
-chmod +x run_worker.sh
-./run_worker.sh 1  # branch_id=1
+chmod +x start_spark_streaming.sh
+./start_spark_streaming.sh
 
 # Hoặc chạy trực tiếp
 python -m app.spark_streaming
 ```
+
+#### Bước 6: Mở Camera Để Nhận Diện
+
+1. **Mở trình duyệt web** trên máy worker
+2. **Truy cập**: `http://${HOST_IP}:8000/camera`
+   - Ví dụ: `http://192.168.1.7:8000/camera`
+3. **Cho phép truy cập camera** khi trình duyệt hỏi
+4. **Chọn chi nhánh** từ dropdown (phải khớp với `DEFAULT_BRANCH_ID` trong `.env`)
+5. **Click "Bắt Đầu"** để bắt đầu nhận diện
+
+**Lưu ý về Camera:**
+- Camera chỉ hoạt động trên HTTPS hoặc localhost
+- Nếu truy cập qua IP, có thể cần cấu hình HTTPS hoặc dùng ngrok
+- Xem thêm trong [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) phần "Lỗi Camera không hoạt động"
 
 ### Trên Worker3 (192.168.80.207, user: nindang)
 
 Làm tương tự như Worker1, nhưng với branch_id khác:
 
 ```bash
-./setup_worker.sh worker3 3  # worker3 với branch_id=3
-./run_worker.sh 3
+./setup_worker.sh worker3 3 192.168.1.7  # worker3 với branch_id=3 và host_ip
+./start_spark_streaming.sh
 
 # Hoặc chỉnh .env thủ công tương tự worker1, nhưng:
 # DEFAULT_BRANCH_ID=3
 ```
 
-## 🔧 Cấu Hình Shared Storage
+### 📹 Mở Camera Trên Máy Worker
 
-### Option 1: NFS (Khuyến nghị cho production)
+Sau khi cấu hình xong, để sử dụng camera:
 
-**Trên máy chủ chính:**
+1. **Mở trình duyệt** trên máy worker
+2. **Truy cập**: `http://${HOST_IP}:8000/camera`
+3. **Chọn chi nhánh** từ dropdown
+4. **Click "Bắt Đầu"** và cho phép truy cập camera
+5. Camera sẽ tự động nhận diện khách hàng
 
-```bash
-# Cài đặt NFS server
-sudo apt-get install nfs-kernel-server
-
-# Cấu hình exports
-sudo nano /etc/exports
-# Thêm dòng:
-/home/haminhchien/Documents/distributed_system/project_final/face_idid/known_faces 192.168.80.0/24(rw,sync,no_subtree_check)
-/home/haminhchien/Documents/distributed_system/project_final/face_idid/uploads 192.168.80.0/24(rw,sync,no_subtree_check)
-
-# Khởi động lại NFS
-sudo systemctl restart nfs-kernel-server
-```
-
-**Trên các máy worker:**
-
-```bash
-# Cài đặt NFS client
-sudo apt-get install nfs-common
-
-# Mount thư mục
-sudo mkdir -p /mnt/faceid_known_faces /mnt/faceid_uploads
-sudo mount -t nfs 192.168.80.147:/home/haminhchien/Documents/distributed_system/project_final/face_idid/known_faces /mnt/faceid_known_faces
-sudo mount -t nfs 192.168.80.147:/home/haminhchien/Documents/distributed_system/project_final/face_idid/uploads /mnt/faceid_uploads
-
-# Cập nhật .env
-KNOWN_FACES_DIR=/mnt/faceid_known_faces
-UPLOAD_DIR=/mnt/faceid_uploads
-```
-
-### Option 2: Rsync (Đơn giản hơn, nhưng không real-time)
-
-Tạo script đồng bộ định kỳ:
-
-```bash
-# sync_faces.sh
-#!/bin/bash
-rsync -avz --delete 192.168.80.147:/path/to/known_faces/ ./known_faces/
-```
-
-Chạy định kỳ với cron:
-
-```bash
-# Cập nhật mỗi 5 phút
-*/5 * * * * /path/to/sync_faces.sh
-```
-
-### Option 3: Database chỉ lưu metadata, images lưu trên shared storage
-
-Các worker có thể truy cập trực tiếp database để lấy metadata, nhưng cần shared storage cho images.
+**Xem hướng dẫn chi tiết trong file [WORKER_CAMERA_GUIDE.md](./WORKER_CAMERA_GUIDE.md)**
 
 ## 🔍 Kiểm Tra Kết Nối
 
@@ -416,7 +326,7 @@ nc -zv ${HOST_IP} 5433
 # Kiểm tra Spark Master
 nc -zv ${HOST_IP} 7077
 
-# Kiểm tra Hadoop HDFS
+# Kiểm tra MinIO
 nc -zv ${HOST_IP} 9000
 ```
 
@@ -429,11 +339,13 @@ curl http://${HOST_IP}:8080
 # Kiểm tra Kafka topics
 docker exec -it kafka kafka-topics --list --bootstrap-server localhost:9092
 
-# Kiểm tra Hadoop HDFS
-$HADOOP_HOME/bin/hdfs dfsadmin -report
-
-# Xem dữ liệu đã lưu trên HDFS
-$HADOOP_HOME/bin/hdfs dfs -ls /face_recognition/data/recognition_results/
+# Kiểm tra MinIO bucket
+docker compose exec web python -c "
+from app.minio_service import MinioService
+service = MinioService()
+files = service.list_files('recognition_results/')
+print('Files in MinIO:', len(list(files)))
+"
 ```
 
 ## 📝 Tạo Chi Nhánh và Gán Cho Worker
@@ -499,44 +411,52 @@ $HADOOP_HOME/bin/hdfs dfs -ls /face_recognition/data/recognition_results/
    sudo ufw allow from 192.168.0.0/16 to any port 8080
    ```
 
-### Worker không lưu được dữ liệu lên Hadoop HDFS
+### Worker không lưu được dữ liệu lên MinIO
 
-1. Kiểm tra Hadoop HDFS đã chạy:
+1. Kiểm tra MinIO đã chạy:
    ```bash
    # Trên máy chủ chính
-   $HADOOP_HOME/sbin/start-dfs.sh
-   $HADOOP_HOME/bin/hdfs dfsadmin -report
+   docker compose ps minio
+   docker compose logs minio
    ```
 
 2. Kiểm tra kết nối từ worker:
    ```bash
    # Trên worker
-   $HADOOP_HOME/bin/hdfs dfs -ls hdfs://${HOST_IP}:9000/
+   python -c "
+   from minio import Minio
+   client = Minio('192.168.1.7:9000', 
+                  access_key='minioadmin', 
+                  secret_key='minioadmin123',
+                  secure=False)
+   buckets = client.list_buckets()
+   print('MinIO buckets:', [b.name for b in buckets])
+   "
    ```
 
 3. Kiểm tra firewall:
    ```bash
    sudo ufw allow from 192.168.0.0/16 to any port 9000
-   sudo ufw allow from 192.168.0.0/16 to any port 9870
+   sudo ufw allow from 192.168.0.0/16 to any port 9001
    ```
 
 4. Kiểm tra Python libraries:
    ```bash
-   pip install hdfs3 pyarrow
+   pip install minio
    ```
 
 5. Kiểm tra dữ liệu đã lưu:
    ```bash
    # Trên máy chủ chính
-   $HADOOP_HOME/bin/hdfs dfs -ls /face_recognition/data/recognition_results/
-   $HADOOP_HOME/bin/hdfs dfs -cat /face_recognition/data/recognition_results/2024/12/18/result_*.json
+   docker compose exec web python -c "
+   from app.minio_service import MinioService
+   service = MinioService()
+   files = list(service.list_files('recognition_results/'))
+   print('Files in MinIO:', len(files))
+   for f in files[:5]:
+       print('  -', f)
+   "
    ```
-
-### Face encodings không đồng bộ
-
-1. Đảm bảo shared storage đã được mount đúng
-2. Kiểm tra quyền truy cập thư mục
-3. Sử dụng rsync để đồng bộ thủ công nếu cần
 
 ## 📊 Monitoring
 
@@ -544,14 +464,12 @@ $HADOOP_HOME/bin/hdfs dfs -ls /face_recognition/data/recognition_results/
 
 **Máy chủ chính:**
 ```bash
-docker-compose logs -f web
-docker-compose logs -f kafka
+docker compose logs -f web
+docker compose logs -f kafka
+docker compose logs -f minio
 
 # Spark Master logs
 tail -f $SPARK_HOME/logs/spark-*-master-*.out
-
-# Hadoop logs
-tail -f $HADOOP_HOME/logs/hadoop-*-namenode-*.log
 ```
 
 **Máy worker:**
@@ -571,22 +489,31 @@ Truy cập: http://${HOST_IP}:8080 (Spark Master Web UI)
 
 Truy cập: http://${HOST_IP}:8080 (Kafka UI)
 
-### Kiểm tra Hadoop HDFS
+### Kiểm tra MinIO
 
-Truy cập: http://${HOST_IP}:9870 (Hadoop NameNode Web UI)
+Truy cập: http://${HOST_IP}:9001 (MinIO Console)
 
 Xem dữ liệu đã lưu:
 ```bash
-$HADOOP_HOME/bin/hdfs dfs -ls /face_recognition/data/recognition_results/
-$HADOOP_HOME/bin/hdfs dfs -cat /face_recognition/data/recognition_results/2024/12/18/result_*.json
+# Sử dụng MinIO client (mc) hoặc Python
+docker compose exec web python -c "
+from app.minio_service import MinioService
+service = MinioService()
+files = list(service.list_files('recognition_results/'))
+print('Total files:', len(files))
+for f in files[:10]:
+    print('  -', f)
+"
 ```
 
 ## 🔒 Bảo Mật
 
 1. **Thay đổi mật khẩu database mặc định**
-2. **Sử dụng firewall để giới hạn truy cập**
-3. **Sử dụng VPN hoặc SSH tunnel cho production**
-4. **Mã hóa dữ liệu nhạy cảm**
+2. **Thay đổi mật khẩu MinIO mặc định**
+3. **Sử dụng firewall để giới hạn truy cập**
+4. **Sử dụng VPN hoặc SSH tunnel cho production**
+5. **Mã hóa dữ liệu nhạy cảm**
+6. **Cấu hình MinIO với SSL/TLS cho production**
 
 ## 📞 Liên Hệ
 
@@ -595,4 +522,4 @@ Nếu gặp vấn đề, kiểm tra:
 2. Kết nối mạng giữa các máy
 3. Firewall rules
 4. Cấu hình trong file .env
-
+5. Xem file [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) để biết thêm chi tiết

@@ -1,64 +1,83 @@
 # Hệ Thống Nhận Diện Khách Hàng - Cửa Hàng Cà Phê
 
-Hệ thống nhận diện khuôn mặt phân tán cho cửa hàng cà phê sử dụng Kafka Streaming và Apache Spark. Hệ thống cho phép nhận diện khách hàng và tự động lấy thông tin đơn hàng gần nhất của họ để chuẩn bị sẵn.
+Hệ thống nhận diện khuôn mặt phân tán cho cửa hàng cà phê sử dụng Kafka Streaming, Apache Spark (cài trên máy host) và MinIO Object Storage. Hệ thống cho phép nhận diện khách hàng và tự động lấy thông tin đơn hàng gần nhất của họ để chuẩn bị sẵn.
 
 ## 🚀 Tính năng
 
-- ✅ Nhận diện khuôn mặt khách hàng real-time
+- ✅ Nhận diện khuôn mặt khách hàng real-time qua camera
 - ✅ Quản lý chi nhánh (tạo, xóa, xem danh sách)
-- ✅ Đăng ký khách hàng mới với ảnh khuôn mặt
+- ✅ Quản lý khách hàng (danh sách, chỉnh sửa, xóa)
+- ✅ Tự động đăng ký khách hàng mới khi không nhận diện được
 - ✅ Quản lý đơn hàng của khách hàng
 - ✅ Tự động lấy đơn hàng gần nhất khi nhận diện được khách
-- ✅ Gửi thông báo đến chi nhánh khi không nhận diện được
+- ✅ Hiển thị combo món thường mua cho khách hàng
+- ✅ Menu thanh toán tích hợp
 - ✅ Kafka Streaming cho xử lý bất đồng bộ
-- ✅ Apache Spark cho xử lý phân tán trên nhiều máy
+- ✅ Apache Spark (trên máy host) cho xử lý phân tán trên nhiều máy
+- ✅ MinIO Object Storage để lưu trữ dữ liệu (images, encodings, logs)
 - ✅ Giao diện web đẹp và dễ sử dụng
 - ✅ API hỗ trợ mobile app cho các chi nhánh
-- ✅ Logs và tracking
+- ✅ Logs và tracking chi tiết
 
 ## 📋 Yêu cầu
 
+### Máy Chủ Chính:
 - Docker và Docker Compose
-- Python 3.11+ (nếu chạy local)
+- Python 3.11+ (nếu chạy Spark Streaming local)
+- Apache Spark (cài trên máy host, không dùng Docker)
 - 8GB RAM trở lên (khuyến nghị)
+
+### Máy Worker:
+- Python 3.11+
+- Apache Spark Worker
+- Kết nối mạng đến máy chủ chính
 
 ## 🛠️ Cài đặt và Chạy
 
 ### 1. Clone và vào thư mục dự án
 
 ```bash
-cd /home/nindang/Documents/distribute_system/faceid
+cd /home/haminhchien/Documents/distributed_system/project_final/face_idid
 ```
 
-### 2. Tạo các thư mục cần thiết
+### 2. Tạo file .env
 
 ```bash
-mkdir -p uploads known_faces app/templates
+cp .env.example .env
+```
+
+Chỉnh sửa `.env` với IP của máy chủ:
+```env
+HOST_IP=192.168.1.7
+MINIO_ENDPOINT=192.168.1.7:9000
+KAFKA_BOOTSTRAP_SERVERS=192.168.1.7:9092
+SPARK_MASTER=spark://192.168.1.7:7077
 ```
 
 ### 3. Chạy hệ thống với Docker Compose
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 Hệ thống sẽ khởi động các services:
 - **Zookeeper**: Port 2181
-- **Kafka**: Port 9092
+- **Kafka**: Port 9092 (external), 9093 (internal)
 - **Kafka UI**: Port 8080 (http://localhost:8080)
-- **Spark Master**: Port 8081 (http://localhost:8081)
-- **Spark Worker**: Xử lý phân tán
+- **MinIO**: Port 9000 (API), 9001 (Console - http://localhost:9001)
+- **PostgreSQL**: Port 5433 (mapped từ 5432)
+- **PgAdmin**: Port 5050 (http://localhost:5050)
 - **Web Application**: Port 8000 (http://localhost:8000)
 
 ### 4. Khởi động Spark Streaming (nếu muốn dùng Spark)
 
-Trong một terminal mới:
+Trên máy chủ chính hoặc worker:
 
 ```bash
-# Nếu chạy trong Docker
-docker exec -it faceid-web python -m app.spark_streaming
+# Sử dụng script có sẵn
+./start_spark_streaming.sh
 
-# Hoặc nếu chạy local
+# Hoặc chạy trực tiếp
 python -m app.spark_streaming
 ```
 
@@ -75,29 +94,22 @@ Mở trình duyệt và truy cập: **http://localhost:8000**
    - Nhập tên, địa chỉ và mô tả chi nhánh
    - Click "Tạo Chi Nhánh"
 
-2. **Đăng Ký Khách Hàng**
-   - Vào tab "Đăng Ký Khách Hàng"
-   - Nhập tên, số điện thoại, email (tùy chọn)
-   - Upload ảnh khuôn mặt rõ ràng
-   - Click "Đăng Ký Khách Hàng"
+2. **Quản Lý Khách Hàng**
+   - Vào tab "Danh Sách Khách Hàng"
+   - Xem danh sách tất cả khách hàng
+   - Click vào khách hàng để xem chi tiết
+   - Click "Sửa" để chỉnh sửa thông tin
+   - Click "Xóa" để xóa khách hàng
 
-3. **Tạo Đơn Hàng**
-   - Vào tab "Quản Lý Đơn Hàng"
-   - Chọn khách hàng và chi nhánh
-   - Nhập danh sách món (JSON format)
-   - Nhập tổng tiền
-   - Click "Tạo Đơn Hàng"
+3. **Nhận Diện Khách Hàng (Camera)**
+   - Vào tab "Camera" hoặc truy cập `/camera`
+   - Chọn chi nhánh
+   - Cho phép truy cập camera
+   - Hệ thống sẽ tự động nhận diện
+   - **Nếu nhận diện được**: Hiển thị menu thanh toán với combo món thường mua
+   - **Nếu không nhận diện được**: Tự động tạo khách hàng mới và hiển thị menu thanh toán
 
-4. **Nhận Diện Khách Hàng**
-   - Vào tab "Nhận Diện Khách Hàng"
-   - Chọn chi nhánh (tùy chọn)
-   - Upload ảnh cần nhận diện
-   - Tích "Sử dụng Spark Streaming" nếu muốn dùng Kafka + Spark
-   - Click "Nhận Diện"
-   - **Nếu nhận diện được**: Hệ thống sẽ hiển thị thông tin khách và đơn hàng gần nhất
-   - **Nếu không nhận diện được**: Hệ thống sẽ thông báo và yêu cầu đăng ký khách mới
-
-5. **Xem Logs**
+4. **Xem Logs**
    - Vào tab "Logs"
    - Xem lịch sử nhận diện
    - Có thể lọc theo chi nhánh
@@ -105,32 +117,41 @@ Mở trình duyệt và truy cập: **http://localhost:8000**
 ## 🏗️ Kiến trúc hệ thống
 
 ```
-┌─────────────┐
-│  Mobile App │  (Tại các chi nhánh)
-│   (Client)  │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   Web UI    │
-│  (FastAPI)  │
-└──────┬──────┘
-       │
-       ├───► Direct Processing (Face Recognition Service)
-       │     ├─► Nếu nhận diện được: Trả về thông tin khách + đơn hàng gần nhất
-       │     └─► Nếu không: Thông báo và yêu cầu đăng ký
-       │
-       └───► Kafka Producer ──► Kafka Topic ──► Spark Streaming
-                                             │
-                                             └───► Kafka Results Topic
+┌─────────────────────────────────────────────────────────┐
+│  Máy Chủ Chính (HOST_IP từ .env, mặc định: 192.168.1.7) │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │  PostgreSQL  │  │    Kafka     │  │ Spark Master │  │
+│  │   :5433      │  │   :9092      │  │   :7077      │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │  Web API     │  │  Zookeeper   │  │    MinIO      │  │
+│  │  :8000       │  │   :2181      │  │   :9000       │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                        │
+        ┌───────────────┴───────────────┐
+        │                                 │
+┌───────▼────────┐            ┌──────────▼────────┐
+│  Worker1       │            │  Worker3          │
+│                │            │                    │
+│ Spark Worker   │            │ Spark Worker      │
+│ Kafka→MinIO    │            │ Kafka→MinIO       │
+│ Face Recog     │            │ Face Recog       │
+└────────────────┘            └───────────────────┘
 ```
+
+**Luồng dữ liệu:**
+1. Camera gửi ảnh → Kafka Topic (`face-recognition-tasks`)
+2. Spark Streaming Worker xử lý nhận diện khuôn mặt
+3. Kết quả được lưu lên **MinIO** (`face-recognition-data/`)
+4. Kết quả được gửi về Kafka Topic (`face-recognition-results`)
 
 ### Components:
 
 1. **Web Backend (FastAPI)**
    - RESTful API
    - Quản lý chi nhánh, khách hàng và đơn hàng
-   - Xử lý upload ảnh
+   - Xử lý upload ảnh và lưu vào MinIO
    - Nhận diện khuôn mặt và trả về đơn hàng gần nhất
    - Gửi tasks vào Kafka
 
@@ -139,17 +160,24 @@ Mở trình duyệt và truy cập: **http://localhost:8000**
    - Topic: `face-recognition-results` (output)
    - Streaming data giữa các services
 
-3. **Spark Streaming**
+3. **Spark Streaming** (trên máy host)
    - Nhận tasks từ Kafka
    - Xử lý phân tán trên nhiều workers
+   - Lưu kết quả vào MinIO
    - Gửi kết quả về Kafka
 
-4. **Face Recognition Service**
+4. **MinIO Object Storage**
+   - Lưu trữ images khách hàng
+   - Lưu trữ face encodings (.pkl files)
+   - Lưu trữ logs và streaming data
+   - Thay thế Hadoop HDFS
+
+5. **Face Recognition Service**
    - Sử dụng thư viện `face_recognition`
-   - Lưu và so sánh face encodings
+   - Tải và so sánh face encodings từ MinIO
    - Hỗ trợ nhận diện theo chi nhánh
 
-5. **Database**
+6. **Database (PostgreSQL)**
    - Lưu trữ thông tin chi nhánh (Branch)
    - Lưu trữ thông tin khách hàng (Customer)
    - Lưu trữ đơn hàng (Order)
@@ -160,32 +188,57 @@ Mở trình duyệt và truy cập: **http://localhost:8000**
 Các biến môi trường có thể cấu hình trong `.env`:
 
 ```env
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-SPARK_MASTER=spark://localhost:7077
-DATABASE_URL=sqlite:///./faceid.db
+# IP của máy chủ chính
+HOST_IP=192.168.1.7
+
+# Kafka Configuration
+KAFKA_BOOTSTRAP_SERVERS=192.168.1.7:9092
+
+# Spark Configuration (cài trên máy host)
+SPARK_HOME=/opt/spark
+SPARK_MASTER=spark://192.168.1.7:7077
+
+# MinIO Configuration
+MINIO_ENDPOINT=192.168.1.7:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin123
+MINIO_BUCKET_NAME=face-recognition-data
+MINIO_USE_SSL=false
+
+# Database Configuration
+POSTGRES_PORT=5433
+DATABASE_URL=postgresql://faceid:faceid123@192.168.1.7:5433/faceid
 ```
 
 ## 📁 Cấu trúc thư mục
 
 ```
-faceid/
+face_idid/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI application
 │   ├── config.py            # Configuration
-│   ├── database.py          # Database models (Branch, Customer, Order)
+│   ├── database.py          # Database models
 │   ├── face_recognition_service.py  # Face recognition logic
 │   ├── kafka_producer.py    # Kafka producer
 │   ├── kafka_consumer.py    # Kafka consumer
 │   ├── spark_streaming.py   # Spark streaming job
+│   ├── minio_service.py     # MinIO client service
 │   └── templates/
-│       └── index.html       # Web UI
-├── uploads/               # Uploaded images
-├── known_faces/             # Face encodings
+│       ├── index.html       # Main web UI
+│       └── camera.html      # Camera recognition page
+├── uploads/                 # Temp files (local)
+├── known_faces/             # Temp encodings (local)
 ├── docker-compose.yml       # Docker services
 ├── Dockerfile              # Web app Docker image
 ├── requirements.txt        # Python dependencies
-└── README.md
+├── start_spark_streaming.sh # Script khởi động Spark Streaming
+├── setup_worker.sh         # Script setup worker machine
+├── README.md
+├── DEPLOYMENT.md           # Hướng dẫn triển khai
+├── QUICKSTART.md           # Hướng dẫn nhanh
+├── TROUBLESHOOTING.md      # Hướng dẫn sửa lỗi
+└── DATABASE_GUIDE.md       # Hướng dẫn xem database
 ```
 
 ## 📝 API Endpoints
@@ -201,6 +254,9 @@ faceid/
 - `POST /api/customers/` - Đăng ký khách hàng mới
 - `GET /api/customers/` - Lấy danh sách khách hàng
 - `GET /api/customers/{customer_id}` - Lấy thông tin khách hàng
+- `GET /api/customers/{customer_id}/details` - Lấy chi tiết khách hàng (stats, orders, branches)
+- `PUT /api/customers/{customer_id}` - Cập nhật khách hàng
+- `DELETE /api/customers/{customer_id}` - Xóa khách hàng
 
 ### Đơn Hàng (Orders)
 - `POST /api/orders/` - Tạo đơn hàng mới
@@ -250,38 +306,32 @@ POST /api/branches/{branch_id}/recognize
 }
 ```
 
-**Response khi không nhận diện được:**
+**Response khi không nhận diện được (tự động tạo khách mới):**
 ```json
 {
-  "status": "not_recognized",
-  "recognized": false,
-  "confidence": 0.0,
-  "message": "Không nhận diện được khách hàng. Vui lòng đăng ký khách hàng mới.",
-  "branch_id": 1,
-  "branch_name": "Chi nhánh 1"
+  "status": "processing_new_customer",
+  "recognized": true,
+  "auto_registered": true,
+  "customer": {
+    "id": 3,
+    "name": "Guest",
+    "phone": null,
+    "email": null
+  },
+  "message": "Khách hàng mới đã được tạo tự động..."
 }
 ```
 
 ## 🐛 Troubleshooting
 
-### Kafka không kết nối được
-- Kiểm tra Kafka đã chạy: `docker ps | grep kafka`
-- Kiểm tra port 9092 có bị chiếm không
-- Xem logs: `docker logs kafka`
+Xem file [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) để biết cách xử lý các lỗi phổ biến.
 
-### Spark không xử lý tasks
-- Kiểm tra Spark Master: http://localhost:8081
-- Kiểm tra Spark Worker đã kết nối
-- Xem logs của spark-streaming
+### Một số lỗi thường gặp:
 
-### Face recognition không hoạt động
-- Đảm bảo ảnh có khuôn mặt rõ ràng
-- Kiểm tra khách hàng đã được đăng ký chưa
-- Xem logs trong terminal
-
-### Database không tạo được tables
-- Xóa file `faceid.db` cũ nếu có
-- Khởi động lại ứng dụng để tạo database mới
+- **Kafka không kết nối được**: Kiểm tra IP trong `.env` và đảm bảo Kafka đang chạy
+- **MinIO không kết nối được**: Kiểm tra `MINIO_ENDPOINT` và đảm bảo MinIO đang chạy
+- **Spark không xử lý tasks**: Kiểm tra Spark Master đang chạy và workers đã kết nối
+- **Face recognition không hoạt động**: Đảm bảo ảnh có khuôn mặt rõ ràng và khách hàng đã được đăng ký
 
 ## 🔒 Lưu ý bảo mật
 
@@ -290,6 +340,7 @@ POST /api/branches/{branch_id}/recognize
 - Cân nhắc thêm authentication và authorization
 - Mã hóa dữ liệu nhạy cảm
 - Bảo vệ API endpoints với API keys hoặc JWT tokens
+- Thay đổi mật khẩu mặc định của MinIO và PostgreSQL
 
 ## 📄 License
 
@@ -297,4 +348,4 @@ MIT License
 
 ## 👨‍💻 Tác giả
 
-Hệ thống nhận diện khách hàng cho cửa hàng cà phê với Kafka Streaming và Spark
+Hệ thống nhận diện khách hàng cho cửa hàng cà phê với Kafka Streaming, Spark và MinIO
