@@ -14,7 +14,6 @@ from pathlib import Path
 
 from app.database import init_db, get_db, Branch, Customer, Order, RecognitionLog
 from app.face_recognition_service import face_service
-from app.kafka_producer import producer
 from app.config import settings
 from app.minio_service import minio_service
 
@@ -781,12 +780,11 @@ async def recognize_face(
         shutil.copyfileobj(image.file, buffer)
     
     if use_spark:
-        # Gửi task vào Kafka để Spark xử lý
-        producer.send_recognition_task(task_id, str(image_path), branch_id)
+        # Spark processing không khả dụng - xử lý trực tiếp
         return {
             "task_id": task_id,
-            "status": "processing",
-            "message": "Task sent to Spark for processing"
+            "status": "error",
+            "message": "Spark processing is not available. Processing directly instead."
         }
 
     # Xử lý trực tiếp
@@ -904,12 +902,11 @@ async def recognize_at_branch(
         shutil.copyfileobj(image.file, buffer)
     
     if use_spark:
-        # Gửi task vào Kafka
-        producer.send_recognition_task(task_id, str(image_path), branch_id)
+        # Spark processing không khả dụng - xử lý trực tiếp
         return {
             "task_id": task_id,
-            "status": "processing",
-            "message": "Recognition task sent to Spark for processing"
+            "status": "error",
+            "message": "Spark processing is not available. Processing directly instead."
         }
 
     # Xử lý trực tiếp

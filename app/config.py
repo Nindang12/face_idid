@@ -1,7 +1,7 @@
 import os
 
 # Lấy HOST_IP từ biến môi trường, fallback về giá trị mặc định
-HOST_IP = os.getenv("HOST_IP", "192.168.1.7")
+HOST_IP = os.getenv("HOST_IP", "192.168.1.9")
 
 class Settings:
     # Host IP Configuration

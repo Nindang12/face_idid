@@ -63,7 +63,7 @@ services:
       # Cấu hình để các worker từ xa có thể kết nối
       # Sử dụng HOST_IP từ .env hoặc KAFKA_ADVERTISED_HOST
       # PLAINTEXT_INTERNAL phải dùng port khác (9093) để tránh conflict
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_ADVERTISED_HOST:-${HOST_IP:-192.168.1.7}}:9092,PLAINTEXT_INTERNAL://kafka:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_ADVERTISED_HOST:-${HOST_IP:-192.168.1.9}}:9092,PLAINTEXT_INTERNAL://kafka:9093
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:9093
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -78,7 +78,7 @@ services:
     depends_on:
       - kafka
     ports:
-      - "8080:8080"
+      - "8081:8081"
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
@@ -123,7 +123,7 @@ services:
       UPLOAD_DIR: /code/app/uploads
       KNOWN_FACES_DIR: /code/app/known_faces
       # MinIO Configuration
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-${HOST_IP:-192.168.1.7}:9000}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-${HOST_IP:-192.168.1.9}:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-face-recognition-data}
