@@ -14,6 +14,7 @@ from pathlib import Path
 
 from app.database import init_db, get_db, Branch, Customer, Order, RecognitionLog
 from app.face_recognition_service import face_service
+from app.kafka_producer import producer
 from app.config import settings
 from app.minio_service import minio_service
 
@@ -78,15 +79,17 @@ def get_image_url(face_encoding_path: Optional[str]) -> Optional[str]:
     if path.startswith('/'):
         path = path[1:]
     
-    # Nếu đã là MinIO path (images/...), giữ nguyên
+    # Nếu đã là MinIO path (images/customer_2.jpg), loại bỏ prefix 'images/' để dùng cho endpoint
     if path.startswith('images/'):
-        object_path = path
+        # Loại bỏ prefix 'images/' vì endpoint /uploads/ sẽ tự thêm vào
+        file_path = path.replace('images/', '', 1)
     else:
-        # Chuyển sang MinIO path format
-        object_path = f"images/{path}"
+        # Giữ nguyên nếu không có prefix
+        file_path = path
     
     # Trả về URL endpoint để serve từ MinIO
-    return f"/uploads/{path}" if path else None
+    # Endpoint /uploads/{image_path} sẽ tự thêm prefix 'images/' vào object_path
+    return f"/uploads/{file_path}" if file_path else None
 
 # Initialize database
 init_db()
@@ -759,7 +762,7 @@ def _auto_register_customer_from_image(
 async def recognize_face(
     image: UploadFile = File(...),
     branch_id: Optional[int] = Form(None),
-    use_spark: bool = Form(False),
+    use_spark: bool = Form(True),
     db: Session = Depends(get_db)
 ):
     """
@@ -780,12 +783,23 @@ async def recognize_face(
         shutil.copyfileobj(image.file, buffer)
     
     if use_spark:
-        # Spark processing không khả dụng - xử lý trực tiếp
-        return {
-            "task_id": task_id,
-            "status": "error",
-            "message": "Spark processing is not available. Processing directly instead."
-        }
+        # Gửi task vào Kafka để Spark xử lý
+        if producer.is_available():
+            success = producer.send_recognition_task(task_id, str(image_path), branch_id)
+            if success:
+                return {
+                    "task_id": task_id,
+                    "status": "processing",
+                    "message": "Task sent to Spark for processing via Kafka"
+                }
+            else:
+                # Kafka không khả dụng, fallback về xử lý trực tiếp
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Kafka unavailable, processing task {task_id} directly")
+        else:
+            # Kafka producer chưa khởi tạo, fallback về xử lý trực tiếp
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Kafka producer not available, processing task {task_id} directly")
 
     # Xử lý trực tiếp
     if branch_id:
@@ -902,12 +916,23 @@ async def recognize_at_branch(
         shutil.copyfileobj(image.file, buffer)
     
     if use_spark:
-        # Spark processing không khả dụng - xử lý trực tiếp
-        return {
-            "task_id": task_id,
-            "status": "error",
-            "message": "Spark processing is not available. Processing directly instead."
-        }
+        # Gửi task vào Kafka để Spark xử lý
+        if producer.is_available():
+            success = producer.send_recognition_task(task_id, str(image_path), branch_id)
+            if success:
+                return {
+                    "task_id": task_id,
+                    "status": "processing",
+                    "message": "Recognition task sent to Spark for processing via Kafka"
+                }
+            else:
+                # Kafka không khả dụng, fallback về xử lý trực tiếp
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Kafka unavailable, processing task {task_id} directly")
+        else:
+            # Kafka producer chưa khởi tạo, fallback về xử lý trực tiếp
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Kafka producer not available, processing task {task_id} directly")
 
     # Xử lý trực tiếp
     # Trước tiên kiểm tra xem có face trong ảnh không

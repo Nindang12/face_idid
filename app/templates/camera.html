@@ -500,7 +500,7 @@
 
                 const formData = new FormData();
                 formData.append('image', blob, 'frame.jpg');
-                formData.append('use_spark', 'false');
+                formData.append('use_spark', 'true');
 
                 try {
                     const res = await fetch(`${API_BASE}/branches/${branchId}/recognize`, {

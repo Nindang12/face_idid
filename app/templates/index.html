@@ -885,7 +885,13 @@
         // Load customers
         async function loadCustomers() {
             try {
-                const response = await fetch(`${API_BASE}/customers/`);
+                // Thêm cache busting để đảm bảo lấy dữ liệu mới nhất
+                const response = await fetch(`${API_BASE}/customers/?_=${Date.now()}`, {
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
+                });
                 if (!response.ok) {
                     const text = await response.text();
                     console.error('Error loading customers:', text);
@@ -910,9 +916,13 @@
                     if (currentValue) select.value = currentValue;
                 });
 
-                // Update customers list
+                // Update customers list - Clear first to force refresh
                 const customersList = document.getElementById('customers-list');
                 if (customersList) {
+                    // Clear ngay lập tức để user thấy đang load
+                    customersList.innerHTML = '<p style="text-align: center; padding: 20px;">Đang tải...</p>';
+                    
+                    // Sau đó render danh sách mới
                     customersList.innerHTML = '';
                     customers.forEach(customer => {
                         // Use face_encoding_path from API (already converted to URL)
@@ -927,8 +937,12 @@
                         card.className = 'customer-card';
                         card.id = `customer-card-${customer.id}`;
                         card.onclick = (e) => {
-                            // Không mở modal nếu click vào button
-                            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                            // Không mở modal nếu click vào button hoặc các phần tử trong form edit
+                            if (e.target.tagName === 'BUTTON' || 
+                                e.target.closest('button') || 
+                                e.target.closest('.customer-edit-form') ||
+                                e.target.tagName === 'INPUT' ||
+                                e.target.tagName === 'LABEL') {
                                 return;
                             }
                             showCustomerDetail(customer.id);
@@ -937,8 +951,8 @@
                             <div class="customer-card-header">
                             <h3>${customer.name}</h3>
                                 <div style="display: flex; gap: 5px;">
-                                    <button class="edit-btn" onclick="event.stopPropagation(); toggleEditCustomer(${customer.id})">✏️ Sửa</button>
-                                    <button class="edit-btn" onclick="event.stopPropagation(); deleteCustomer(${customer.id})" style="background: #dc3545;">🗑️ Xóa</button>
+                                    <button class="edit-btn" onclick="event.stopPropagation(); event.preventDefault(); toggleEditCustomer(${customer.id}); return false;">✏️ Sửa</button>
+                                    <button class="edit-btn" onclick="event.stopPropagation(); event.preventDefault(); deleteCustomer(${customer.id}); return false;" style="background: #dc3545;">🗑️ Xóa</button>
                                 </div>
                             </div>
                             <img class="customer-avatar" src="${imageUrl}" alt="Ảnh khách hàng" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(customer.name)}&background=D2691E&color=fff&size=100';">
@@ -961,16 +975,10 @@
                                     <label>Email:</label>
                                     <input type="email" id="edit-email-${customer.id}" value="${customer.email || ''}">
                                 </div>
-                                <div class="form-group">
-                                    <label>Ảnh mới (tùy chọn):</label>
-                                    <div class="file-input-wrapper">
-                                        <input type="file" id="edit-image-${customer.id}" accept="image/*">
-                                    </div>
-                                    <small style="color: #666;">Chỉ chọn nếu muốn thay đổi ảnh</small>
-                                </div>
+                                <!-- Ảnh đại diện: Sử dụng ảnh ban đầu khi tạo account. Chỉnh sửa ảnh sẽ được thêm sau -->
                                 <div class="form-actions">
-                                    <button class="btn" onclick="saveCustomer(${customer.id})">💾 Lưu</button>
-                                    <button class="btn btn-cancel" onclick="toggleEditCustomer(${customer.id})">❌ Hủy</button>
+                                    <button class="btn" onclick="event.stopPropagation(); saveCustomer(${customer.id}); return false;">💾 Lưu</button>
+                                    <button class="btn btn-cancel" onclick="event.stopPropagation(); toggleEditCustomer(${customer.id}); return false;">❌ Hủy</button>
                                 </div>
                             </div>
                         `;
@@ -1231,7 +1239,9 @@
         // Toggle edit form
         function toggleEditCustomer(customerId) {
             const editForm = document.getElementById(`edit-form-${customerId}`);
-            editForm.classList.toggle('active');
+            if (editForm) {
+                editForm.classList.toggle('active');
+            }
         }
 
         // Save customer changes
@@ -1239,7 +1249,8 @@
             const name = document.getElementById(`edit-name-${customerId}`).value;
             const phone = document.getElementById(`edit-phone-${customerId}`).value;
             const email = document.getElementById(`edit-email-${customerId}`).value;
-            const imageFile = document.getElementById(`edit-image-${customerId}`).files[0];
+            // Ảnh đại diện: Sử dụng ảnh ban đầu khi tạo account. Chỉnh sửa ảnh sẽ được thêm sau
+            // const imageFile = document.getElementById(`edit-image-${customerId}`).files[0];
 
             if (!name.trim()) {
                 showAlert('Tên khách hàng không được để trống!', 'error');
@@ -1250,7 +1261,8 @@
             formData.append('name', name);
             if (phone) formData.append('phone', phone);
             if (email) formData.append('email', email);
-            if (imageFile) formData.append('image', imageFile);
+            // Không gửi ảnh trong lúc chỉnh sửa (sẽ làm sau)
+            // if (imageFile) formData.append('image', imageFile);
 
             try {
                 const response = await fetch(`${API_BASE}/customers/${customerId}`, {
@@ -1263,7 +1275,10 @@
                 if (response.ok) {
                     showAlert('Cập nhật khách hàng thành công!', 'success');
                     toggleEditCustomer(customerId); // Đóng form
-                    loadCustomers(); // Reload danh sách
+                    // Force reload danh sách ngay lập tức với delay nhỏ để đảm bảo DB đã commit
+                    setTimeout(async () => {
+                        await loadCustomers();
+                    }, 100);
                 } else {
                     showAlert('Lỗi: ' + (result.detail || 'Không thể cập nhật'), 'error');
                 }
@@ -1294,7 +1309,10 @@
                 
                 if (response.ok) {
                     showAlert('Xóa khách hàng thành công!', 'success');
-                    loadCustomers(); // Reload danh sách
+                    // Force reload danh sách ngay lập tức với delay nhỏ để đảm bảo DB đã commit
+                    setTimeout(async () => {
+                        await loadCustomers();
+                    }, 100);
                 } else {
                     showAlert('Lỗi: ' + (result.detail || 'Không thể xóa'), 'error');
                 }
