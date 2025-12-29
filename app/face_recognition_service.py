@@ -2,6 +2,7 @@ import face_recognition
 import numpy as np
 import os
 import pickle
+import time
 from pathlib import Path
 from app.config import settings
 from app.minio_service import minio_service
@@ -14,28 +15,48 @@ class FaceRecognitionService:
     def __init__(self):
         self.known_encodings = {}
         self.known_names = {}
+        self.last_updated = 0
+        self.CACHE_TTL = 10  # Check for updates every 10 seconds (aggressive for demo)
         self.load_known_faces()
     
+    def refresh_cache_if_needed(self):
+        """Kiểm tra và cập nhật cache nếu hết hạn"""
+        if time.time() - self.last_updated > self.CACHE_TTL:
+            self.load_known_faces()
+
     def load_known_faces(self):
-        """Load tất cả khuôn mặt đã biết từ MinIO"""
+        """Load các khuôn mặt mới từ MinIO (Smart Update)"""
         try:
+            current_time = time.time()
             # Liệt kê tất cả encodings từ MinIO
             encoding_files = minio_service.list_files(prefix="encodings/")
             
+            # Chỉ download những file chưa có trong local cache
+            # (Giả định đơn giản: file name = user_id.pkl, không thay đổi content)
+            
+            new_files_count = 0
             for object_path in encoding_files:
                 if object_path.endswith('.pkl'):
-                    try:
-                        # Download encoding từ MinIO
-                        encoding_data = minio_service.download_file(object_path)
-                        if encoding_data:
-                            data = pickle.loads(encoding_data)
-                            # Extract user_id từ object path (encodings/user_id.pkl)
-                            user_id = Path(object_path).stem
-                            self.known_encodings[user_id] = data['encoding']
-                            self.known_names[user_id] = data['name']
-                            logger.info(f"Loaded face encoding for user: {user_id} from MinIO")
-                    except Exception as e:
-                        logger.error(f"Error loading face encoding from MinIO {object_path}: {e}")
+                    user_id = Path(object_path).stem
+                    
+                    # Nếu user_id chưa có trong cache -> Download
+                    if user_id not in self.known_encodings:
+                        try:
+                            # Download encoding từ MinIO
+                            encoding_data = minio_service.download_file(object_path)
+                            if encoding_data:
+                                data = pickle.loads(encoding_data)
+                                self.known_encodings[user_id] = data['encoding']
+                                self.known_names[user_id] = data['name']
+                                new_files_count += 1
+                        except Exception as e:
+                            logger.error(f"Error loading face encoding from MinIO {object_path}: {e}")
+                            
+            if new_files_count > 0:
+                logger.info(f"Updated face cache: Loaded {new_files_count} new faces. Total: {len(self.known_encodings)}")
+            
+            self.last_updated = current_time
+            
         except Exception as e:
             logger.error(f"Error loading known faces from MinIO: {e}")
     
@@ -77,8 +98,10 @@ class FaceRecognitionService:
                 return False
         return False
     
-    def recognize_face(self, image_path: str, tolerance: float = 0.6):
+    def recognize_face(self, image_path: str, tolerance: float = 0.50):
         """Nhận diện khuôn mặt trong ảnh"""
+        self.refresh_cache_if_needed() # Auto-refresh cache
+        
         try:
             unknown_encoding = self.encode_face(image_path)
             if unknown_encoding is None:
@@ -110,12 +133,14 @@ class FaceRecognitionService:
             logger.error(f"Error recognizing face from {image_path}: {e}")
             return None, 0.0
     
-    def recognize_face_in_room(self, image_path: str, room_user_ids: list = None, tolerance: float = 0.6):
+    def recognize_face_in_room(self, image_path: str, room_user_ids: list = None, tolerance: float = 0.50):
         """Nhận diện khuôn mặt trong một room cụ thể (deprecated - dùng recognize_face_in_branch)"""
         return self.recognize_face_in_branch(image_path, room_user_ids, tolerance)
     
-    def recognize_face_in_branch(self, image_path: str, branch_customer_ids: list = None, tolerance: float = 0.6):
+    def recognize_face_in_branch(self, image_path: str, branch_customer_ids: list = None, tolerance: float = 0.50):
         """Nhận diện khuôn mặt trong một branch cụ thể"""
+        self.refresh_cache_if_needed() # Auto-refresh cache
+        
         if branch_customer_ids is None:
             return self.recognize_face(image_path, tolerance)
         

@@ -56,6 +56,11 @@ class FaceRecognitionProducer:
         self, task_id: str, image_path: str, branch_id: int = None
     ) -> bool:
         """Gửi task nhận diện khuôn mặt vào Kafka. Trả về True/False."""
+        # Lazy reconnection: Nếu producer chưa có, thử init lại
+        if not self.producer:
+            logger.info("⚠️ KafkaProducer is None, attempting to re-initialize...")
+            self._initialize_producer()
+            
         if not self.producer:
             logger.error(
                 "❌ KafkaProducer is not available. Cannot send recognition task. "

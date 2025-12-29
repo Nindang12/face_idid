@@ -71,11 +71,45 @@ def process_face_recognition(task_id, image_path, branch_id):
             finally:
                 db.close()
         
-        # Nhận diện khuôn mặt
-        if branch_customer_ids:
-            result, confidence = face_service.recognize_face_in_branch(image_path, branch_customer_ids)
-        else:
-            result, confidence = face_service.recognize_face(image_path)
+        
+        # Xử lý download từ MinIO
+        local_image_path = image_path
+        is_temp_file = False
+        
+        # Nếu path không phải absolute path hoặc file không tồn tại, thử download từ MinIO
+        if not os.path.isabs(image_path) or not os.path.exists(image_path):
+            logger.info(f"[Spark Worker] File {image_path} seems to be remote, downloading from MinIO...")
+            
+            import tempfile
+            file_ext = os.path.splitext(image_path)[1] or ".jpg"
+            # Tạo temp file trong /tmp của worker node
+            fd, temp_path = tempfile.mkstemp(suffix=file_ext)
+            os.close(fd)
+            
+            local_image_path = temp_path
+            is_temp_file = True
+            
+            # Download
+            img_data = minio_service.download_file(image_path)
+            if img_data:
+                with open(local_image_path, "wb") as f:
+                    f.write(img_data)
+                logger.info(f"✅ Downloaded from MinIO to {local_image_path}")
+            else:
+                # Thử check xem có phải process local cũ gửi local path không?
+                # Nếu không download được từ MinIO và file không tồn tại -> Lỗi
+                raise Exception(f"Image not found at {image_path} and could not download from MinIO")
+
+        try:
+            # Nhận diện khuôn mặt
+            if branch_customer_ids:
+                result, confidence = face_service.recognize_face_in_branch(local_image_path, branch_customer_ids)
+            else:
+                result, confidence = face_service.recognize_face(local_image_path)
+        finally:
+             if is_temp_file and os.path.exists(local_image_path):
+                os.remove(local_image_path)
+
         
         # Tạo kết quả
         recognition_result = {
@@ -173,10 +207,16 @@ def main():
         .format("kafka") \
         .option("kafka.bootstrap.servers", kafka_bootstrap_servers) \
         .option("subscribe", kafka_input_topic) \
-        .option("startingOffsets", "latest") \
+        .option("startingOffsets", "earliest") \
         .option("failOnDataLoss", "false") \
         .load()
     
+    # DEBUG: In ra console để kiểm tra dữ liệu đọc được (Tạm tắt để check output)
+    # debug_query = df.selectExpr("CAST(value AS STRING)").writeStream \
+    #     .format("console") \
+    #     .outputMode("append") \
+    #     .start()
+
     # Parse JSON từ Kafka value
     df_parsed = df.select(
         col("key").cast("string").alias("kafka_key"),
@@ -205,6 +245,13 @@ def main():
     df_output = df_processed.select(
         from_json(col("result_json"), output_schema).alias("result")
     ).select("result.*")
+
+    # DEBUG: In kết quả ĐÃ XỬ LÝ ra console
+    debug_output_query = df_output.writeStream \
+        .format("console") \
+        .option("truncate", "false") \
+        .outputMode("append") \
+        .start()
     
     # Convert output thành JSON string để gửi về Kafka
     df_final = df_output.select(
@@ -237,7 +284,8 @@ def main():
     logger.info("⏳ Press Ctrl+C to stop")
     
     # Chờ query chạy
-    query.awaitTermination()
+    # PySpark StreamingQueryManager.awaitTermination() waits for any
+    spark.streams.awaitAnyTermination()
 
 if __name__ == "__main__":
     main()

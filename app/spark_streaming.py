@@ -105,11 +105,51 @@ def process_with_spark_workers():
                     finally:
                         db.close()
                 
+                # Kiểm tra xem image_path có phải là MinIO path không (không bắt đầu bằng /)
+                # Hoặc logic đơn giản: Luôn thử download từ MinIO nếu file không tồn tại lcoal
+                # Với thay đổi ở main.py, image_path sẽ là "temp/..." (MinIO path)
+                
+                local_image_path = image_path
+                is_temp_file = False
+                
+                import os
+                # Nếu path không tồn tại local, giả định đó là MinIO path và download về
+                if not os.path.exists(image_path):
+                    logger.info(f"[Spark Worker] File {image_path} not found locally, attempting to download from MinIO...")
+                    
+                    # Tạo file tạm
+                    import tempfile
+                    from pathlib import Path
+                    
+                    file_ext = os.path.splitext(image_path)[1] or ".jpg"
+                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_ext)
+                    local_image_path = temp_file.name
+                    temp_file.close()
+                    is_temp_file = True
+                    
+                    # Download từ MinIO
+                    img_data = minio_service.download_file(image_path)
+                    if img_data:
+                        with open(local_image_path, "wb") as f:
+                            f.write(img_data)
+                        logger.info(f"✅ Downloaded {image_path} to {local_image_path}")
+                    else:
+                        logger.error(f"❌ Failed to download {image_path} from MinIO")
+                        # Nếu không download được, không thể xử lý
+                        raise Exception(f"Failed to download image {image_path} from MinIO")
+                
+                
                 # Nhận diện khuôn mặt
-                if branch_customer_ids:
-                    result, confidence = face_service.recognize_face_in_branch(image_path, branch_customer_ids)
-                else:
-                    result, confidence = face_service.recognize_face(image_path)
+                try:
+                    if branch_customer_ids:
+                        result, confidence = face_service.recognize_face_in_branch(local_image_path, branch_customer_ids)
+                    else:
+                        result, confidence = face_service.recognize_face(local_image_path)
+                finally:
+                    # Cleanup temp file if we created one
+                    if is_temp_file and os.path.exists(local_image_path):
+                        os.remove(local_image_path)
+                        logger.info(f"🧹 Cleaned up temp file {local_image_path}")
                 
                 # Tạo kết quả
                 recognition_result = {

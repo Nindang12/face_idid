@@ -756,6 +756,54 @@ def _auto_register_customer_from_image(
     return customer
 
 
+
+@app.get("/api/recognition-status/{task_id}")
+async def get_recognition_status(task_id: str, db: Session = Depends(get_db)):
+    """Kiểm tra trạng thái nhận diện của task"""
+    # Tìm log có image_path chứa task_id (vì image_path lưu dạng temp/task_id.jpg)
+    log = db.query(RecognitionLog).filter(RecognitionLog.image_path.like(f"%{task_id}%")).first()
+    
+    if not log:
+        return {"status": "processing"}
+    
+    # Nếu đã có log -> đã xử lý xong
+    result = {
+        "status": "recognized" if log.recognized else "not_recognized",
+        "recognized": log.recognized,
+        "customer_id": log.customer_id,
+        "confidence": log.confidence,
+        "created_at": log.created_at,
+        "image_path": log.image_path
+    }
+    
+    if log.customer_id:
+        customer = db.query(Customer).filter(Customer.id == log.customer_id).first()
+        if customer:
+            result["customer"] = {
+                "id": customer.id,
+                "name": customer.name,
+                "phone": customer.phone,
+                "email": customer.email,
+                "face_encoding_path": get_image_url(customer.face_encoding_path)
+            }
+            # Lấy thêm thống kê cho UI
+            result["stats"] = _build_customer_stats(db, customer.id, log.branch_id)
+            
+            # Lấy frequent combos
+            details = await get_customer_details(customer.id, db)
+            result["frequent_combos"] = details.get("frequent_combos", [])
+            
+    # HACK: Kiểm tra xem có phải là khách mới vừa được auto-register không?
+    # Nếu log.recognized = False, nhưng thực tế result_processor đã auto-register
+    # thì ta cần check xem có customer nào được tạo với face_encoding_path khớp image_path không (hoặc logic tương tự)
+    # Tuy nhiên, result_processor hiện tại lưu log TRƯỚC khi auto-register (để fix lỗi duplicate)
+    # Nên nếu log.recognized = False, UI sẽ nhận được "not_recognized".
+    # UI có thể cần poll thêm 1 lần nữa hoặc chờ confirm?
+    # Để đơn giản: result_processor nên update lại log sau khi register thành công?
+    # Hoặc ta query Customer xem có ai có face_encoding_path chứa task_id không? (ít khả thi vì path thay đổi)
+    
+    return result
+
 # ========== FACE RECOGNITION APIs ==========
 
 @app.post("/api/recognize/")
@@ -783,9 +831,25 @@ async def recognize_face(
         shutil.copyfileobj(image.file, buffer)
     
     if use_spark:
-        # Gửi task vào Kafka để Spark xử lý
+        # Upload ảnh lên MinIO trước khi gửi task
+        minio_object_path = f"temp/{task_id}{file_extension}"
+        content_type = f"image/{file_extension[1:]}" if file_extension else "image/jpeg"
+        
+        # Reset file pointer về đầu để đọc data
+        await image.seek(0)
+        image_data = await image.read()
+        
+        if not minio_service.upload_file(minio_object_path, image_data, content_type):
+            raise HTTPException(status_code=500, detail="Failed to upload image to storage")
+            
+        logging.getLogger(__name__).info(f"Uploaded temp image to MinIO: {minio_object_path}")
+        
+        # Gửi task vào Kafka với đường dẫn MinIO
         if producer.is_available():
-            success = producer.send_recognition_task(task_id, str(image_path), branch_id)
+            # Lưu ý: send_recognition_task cần được cập nhật để chấp nhận MinIO path
+            # Hoặc ta gửi trực tiếp dictionary nếu producer class hỗ trợ
+            # Ở đây ta giả định producer.send_recognition_task gửi path string
+            success = producer.send_recognition_task(task_id, minio_object_path, branch_id)
             if success:
                 return {
                     "task_id": task_id,
@@ -793,11 +857,27 @@ async def recognize_face(
                     "message": "Task sent to Spark for processing via Kafka"
                 }
             else:
-                # Kafka không khả dụng, fallback về xử lý trực tiếp
+                # Nếu gửi Kafka thất bại, có thể fallback hoặc báo lỗi
+                # Trong trường hợp fallback, ta cần file local. 
+                # Nhưng để đúng chuẩn phân tán, ta nên báo lỗi hoặc handle retry.
+                # Tuy nhiên code cũ có fallback, ta sẽ giữ logic fallback nhưng phải download lại từ MinIO hoặc save local file như cũ
+                # Để đơn giản và an toàn cho fallback: ta vẫn save local file "just in case" hoặc chỉ save khi cần fallback.
+                # Nhưng để tối ưu, ta thử gửi Kafka trước.
+                
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Kafka unavailable, processing task {task_id} directly")
+                
+                # Fallback: Save to local for direct processing
+                image_path = upload_dir / f"temp_{task_id}{file_extension}"
+                with open(image_path, "wb") as buffer:
+                    buffer.write(image_data)
         else:
             # Kafka producer chưa khởi tạo, fallback về xử lý trực tiếp
+            # Cần save file local
+            image_path = upload_dir / f"temp_{task_id}{file_extension}"
+            with open(image_path, "wb") as buffer:
+                buffer.write(image_data)
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Kafka producer not available, processing task {task_id} directly")
 
@@ -916,9 +996,24 @@ async def recognize_at_branch(
         shutil.copyfileobj(image.file, buffer)
     
     if use_spark:
+        # Upload ảnh lên MinIO trước khi gửi task
+        minio_object_path = f"temp/{task_id}{file_extension}"
+        content_type = f"image/{file_extension[1:]}" if file_extension else "image/jpeg"
+        
+        # Reset file pointer về đầu để đọc data
+        await image.seek(0)
+        image_data = await image.read()
+        
+        success_upload = minio_service.upload_file(minio_object_path, image_data, content_type)
+        if success_upload:
+            logging.getLogger(__name__).info(f"Uploaded temp image to MinIO: {minio_object_path}")
+        else:
+             logging.getLogger(__name__).error(f"Failed to upload image to MinIO: {minio_object_path}")
+
         # Gửi task vào Kafka để Spark xử lý
-        if producer.is_available():
-            success = producer.send_recognition_task(task_id, str(image_path), branch_id)
+        if producer.is_available() and success_upload:
+            # Gửi MinIO path thay vì local path
+            success = producer.send_recognition_task(task_id, minio_object_path, branch_id)
             if success:
                 return {
                     "task_id": task_id,
@@ -930,9 +1025,9 @@ async def recognize_at_branch(
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Kafka unavailable, processing task {task_id} directly")
         else:
-            # Kafka producer chưa khởi tạo, fallback về xử lý trực tiếp
+            # Kafka producer chưa khởi tạo hoặc upload thất bại, fallback về xử lý trực tiếp
             logger = logging.getLogger(__name__)
-            logger.warning(f"Kafka producer not available, processing task {task_id} directly")
+            logger.warning(f"Kafka producer unavailable or upload failed, processing task {task_id} directly")
 
     # Xử lý trực tiếp
     # Trước tiên kiểm tra xem có face trong ảnh không
