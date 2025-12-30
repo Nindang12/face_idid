@@ -111,35 +111,22 @@ def process_results():
 
             try:
 
-                # Log recognition result to DB for UI Polling / History
-                log_entry = RecognitionLog(
-                    branch_id=branch_id,
-                    image_path=minio_temp_path,
-                    recognized=recognized,
-                    confidence=str(data.get('confidence', 0.0)),
-                    created_at=datetime.utcnow()
-                )
+                # Initialize final result variables
+                final_recognized = recognized
+                final_customer_id = None
+                final_image_path = minio_temp_path # Default to temp path, updated if auto-registered
                 
                 if recognized:
                     logger.info(f"✅ Face recognized for task {task_id}")
-                    # Parse result JSON to get customer_id
                     try:
                         raw_result = data.get('result')
                         if raw_result:
                             result_json = json.loads(raw_result) if isinstance(raw_result, str) else raw_result
-                            log_entry.customer_id = int(result_json.get('customer_id'))
+                            final_customer_id = int(result_json.get('customer_id'))
                     except Exception as e:
                         logger.warning(f"Could not parse customer_id from result: {e}")
                 else:
                     logger.info(f"👤 Face NOT recognized for task {task_id}. Checking again with updated cache...")
-                    # ... (double check logic)
-                    
-                db.add(log_entry)
-                db.commit() # Commit log entry first
-
-                if not recognized:
-                    # Proceed with double check and registration logic...
-
                     
                     # 1. Download image from MinIO temp path
                     if minio_temp_path:
@@ -155,7 +142,7 @@ def process_results():
                                 f.write(img_data)
                             
                             # === DOUBLE CHECKING LOGIC ===
-                            # Check if the face is NOW recognized (maybe registered by a previous task in this batch)
+                            # Check if the face is NOW recognized
                             double_check_result, _ = face_service.recognize_face(local_temp_file)
                             
                             if double_check_result:
@@ -163,31 +150,41 @@ def process_results():
                                 matched_id = double_check_result.get('customer_id')
                                 logger.info(f"✋ Wait! We actually know this person now: {matched_name} (ID: {matched_id}). Skipping registration.")
                                 
-                                # Update log entry so UI sees the result
-                                log_entry.customer_id = int(matched_id)
-                                log_entry.recognized = True
-                                db.commit()
+                                final_recognized = True
+                                final_customer_id = int(matched_id)
                             else:
                                 # 2. Register new customer
-                                # ONLY register if we can successfully encode the face (to prevent duplicates)
-                                # Check encoding first before creating DB record?
-                                # Or rely on auto_register_customer to return None if encoding fails?
-
-                                # Let's modify auto_register_customer to be stricter
                                 new_customer = auto_register_customer(db, local_temp_file, file_ext)
                                 
                                 if new_customer:
                                     logger.info(f"🎉 Successfully registered new customer: {new_customer.name} (ID: {new_customer.id})")
-                                    
-                                    # Update log entry so UI sees the new guest
-                                    log_entry.customer_id = new_customer.id
-                                    db.commit()
+                                    final_recognized = True
+                                    final_customer_id = new_customer.id
+                                    # Update image path to the permanent one if needed? 
+                                    # Actually auto_register updates customer.face_encoding_path, but log.image_path is usually the capture.
+                                    # We can keep minio_temp_path or use new path. Let's keep temp path for history or update it?
+                                    # The temp file gets deleted later. So we SHOULD update log to point to the permanent image if possible.
+                                    # But auto_register uploads to images/customer_ID.jpg.
+                                    final_image_path = f"images/customer_{new_customer.id}{file_ext}" # Logic from auto_register
                                 else:
                                     logger.warning(f"⏩ Skipped registration for task {task_id} because no face could be encoded.")
                         else:
                             logger.error(f"Could not download {minio_temp_path} from MinIO")
                     else:
                         logger.error("No image_path provided in result")
+
+                # Creates Log entry at the END with final state
+                log_entry = RecognitionLog(
+                    branch_id=branch_id,
+                    image_path=final_image_path, # Use final path (perm or temp)
+                    recognized=final_recognized,
+                    confidence=str(data.get('confidence', 0.0)),
+                    created_at=datetime.utcnow(),
+                    customer_id=final_customer_id
+                )
+                db.add(log_entry)
+                db.commit()
+                logger.info(f"💾 Saved RecognitionLog for task {task_id} (Customer: {final_customer_id}, Recognized: {final_recognized})")
 
                 # 3. Cleanup: Delete temp file from MinIO
                 if minio_temp_path and minio_temp_path.startswith("temp/"):

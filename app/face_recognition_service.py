@@ -61,16 +61,51 @@ class FaceRecognitionService:
             logger.error(f"Error loading known faces from MinIO: {e}")
     
     def encode_face(self, image_path: str):
-        """Encode khuôn mặt từ ảnh"""
+        """Encode khuôn mặt từ ảnh (Ưu tiên khuôn mặt ở giữa ảnh)"""
         try:
             image = face_recognition.load_image_file(image_path)
-            encodings = face_recognition.face_encodings(image)
+            
+            # 1. Tìm vị trí các khuôn mặt: List of (top, right, bottom, left)
+            # Dùng model='hog' cho nhanh, hoặc 'cnn' nếu có GPU
+            face_locations = face_recognition.face_locations(image)
+            
+            if len(face_locations) == 0:
+                logger.warning(f"No face found in image: {image_path}")
+                return None
+            
+            # 2. Nếu có nhiều mặt, chọn mặt gần tâm hình nhất
+            selected_location = face_locations[0]
+            
+            if len(face_locations) > 1:
+                # Kích thước ảnh
+                height, width, _ = image.shape
+                center_x, center_y = width / 2, height / 2
+                
+                min_distance = float('inf')
+                
+                for face_loc in face_locations:
+                    top, right, bottom, left = face_loc
+                    # Tính tâm của khuôn mặt
+                    face_center_x = (left + right) / 2
+                    face_center_y = (top + bottom) / 2
+                    
+                    # Tính khoảng cách Euclidean đến tâm ảnh
+                    distance = ((face_center_x - center_x) ** 2 + (face_center_y - center_y) ** 2) ** 0.5
+                    
+                    if distance < min_distance:
+                        min_distance = distance
+                        selected_location = face_loc
+                
+                logger.info(f"Found {len(face_locations)} faces. Selected face at {selected_location} (dist: {min_distance:.2f})")
+
+            # 3. Encode khuôn mặt đã chọn
+            encodings = face_recognition.face_encodings(image, known_face_locations=[selected_location])
             
             if len(encodings) > 0:
                 return encodings[0]
             else:
-                logger.warning(f"No face found in image: {image_path}")
                 return None
+                
         except Exception as e:
             logger.error(f"Error encoding face from {image_path}: {e}")
             return None

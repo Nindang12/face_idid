@@ -48,10 +48,10 @@ cp .env.example .env
 
 Chỉnh sửa `.env` với IP của máy chủ:
 ```env
-HOST_IP=192.168.1.7
-MINIO_ENDPOINT=192.168.1.7:9000
-KAFKA_BOOTSTRAP_SERVERS=192.168.1.7:9092
-SPARK_MASTER=spark://192.168.1.7:7077
+HOST_IP=192.168.1.34
+MINIO_ENDPOINT=192.168.1.34:9000
+KAFKA_BOOTSTRAP_SERVERS=192.168.1.34:9092
+SPARK_MASTER=spark://192.168.1.34:7077
 ```
 
 ### 3. Chạy hệ thống với Docker Compose
@@ -63,22 +63,19 @@ docker compose up -d
 Hệ thống sẽ khởi động các services:
 - **Zookeeper**: Port 2181
 - **Kafka**: Port 9092 (external), 9093 (internal)
-- **Kafka UI**: Port 8080 (http://localhost:8080)
-- **MinIO**: Port 9000 (API), 9001 (Console - http://localhost:9001)
+- **Kafka UI**: Port 8081 (http://192.168.1.34:8081)
+- **MinIO**: Port 9000 (API), 9001 (Console - http://192.168.1.34:9001)
 - **PostgreSQL**: Port 5433 (mapped từ 5432)
-- **PgAdmin**: Port 5050 (http://localhost:5050)
-- **Web Application**: Port 8000 (http://localhost:8000)
+- **PgAdmin**: Port 5050 (http://192.168.1.34:5050)
+- **Web Application**: Port 8000 (http://192.168.1.34:8000)
 
-### 4. Khởi động Spark Streaming (nếu muốn dùng Spark)
+### 4. Khởi động Spark Streaming (quan trọng)
 
-Trên máy chủ chính hoặc worker:
+Trên máy chủ chính hoặc worker, sử dụng script sau để submit job lên Spark Master:
 
 ```bash
-# Sử dụng script có sẵn
-./start_spark_streaming.sh
-
-# Hoặc chạy trực tiếp
-python -m app.spark_streaming
+# Script này sẽ tự động tải các dependencies và chạy job
+./run_spark_submit.sh
 ```
 
 ## 📖 Hướng dẫn sử dụng
@@ -221,8 +218,8 @@ face_idid/
 │   ├── database.py          # Database models
 │   ├── face_recognition_service.py  # Face recognition logic
 │   ├── kafka_producer.py    # Kafka producer
-│   ├── kafka_consumer.py    # Kafka consumer
-│   ├── spark_streaming.py   # Spark streaming job
+│   ├── result_processor.py  # Service xử lý kết quả & auto-registration
+│   ├── spark_streaming.py   # Spark streaming logic
 │   ├── minio_service.py     # MinIO client service
 │   └── templates/
 │       ├── index.html       # Main web UI
@@ -232,13 +229,9 @@ face_idid/
 ├── docker-compose.yml       # Docker services
 ├── Dockerfile              # Web app Docker image
 ├── requirements.txt        # Python dependencies
-├── start_spark_streaming.sh # Script khởi động Spark Streaming
-├── setup_worker.sh         # Script setup worker machine
-├── README.md
-├── DEPLOYMENT.md           # Hướng dẫn triển khai
-├── QUICKSTART.md           # Hướng dẫn nhanh
-├── TROUBLESHOOTING.md      # Hướng dẫn sửa lỗi
-└── DATABASE_GUIDE.md       # Hướng dẫn xem database
+├── run_spark_submit.sh     # Script chạy Spark Streaming (Summit mode)
+├── spark_kafka_stream.py   # Entry point cho Spark Job
+└── README.md
 ```
 
 ## 📝 API Endpoints
@@ -323,8 +316,6 @@ POST /api/branches/{branch_id}/recognize
 ```
 
 ## 🐛 Troubleshooting
-
-Xem file [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) để biết cách xử lý các lỗi phổ biến.
 
 ### Một số lỗi thường gặp:
 
