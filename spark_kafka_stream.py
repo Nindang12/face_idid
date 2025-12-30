@@ -163,10 +163,10 @@ def main():
     """Main function để chạy Spark Streaming"""
     
     # Lấy config từ environment variables
-    kafka_bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "192.168.1.9:9092")
+    kafka_bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "192.168.80.147:9092")
     kafka_input_topic = os.getenv("KAFKA_TOPIC_FACE_RECOGNITION", "face-recognition-tasks")
     kafka_output_topic = os.getenv("KAFKA_TOPIC_RESULTS", "face-recognition-results")
-    spark_master = os.getenv("SPARK_MASTER", "spark://192.168.1.9:7077")
+    spark_master = os.getenv("SPARK_MASTER", "spark://192.168.80.147:7077")
     
     logger.info("=" * 60)
     logger.info("🚀 Starting Spark Structured Streaming for Face Recognition")

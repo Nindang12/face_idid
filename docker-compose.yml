@@ -62,7 +62,7 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
       # Cấu hình để các worker từ xa có thể kết nối
       # UPDATE: Advertise HOST_IP for external connections (required for distributed Spark/Remote workers)
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${HOST_IP:-192.168.1.34}:9092,PLAINTEXT_INTERNAL://kafka:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${HOST_IP:-192.168.80.147}:9092,PLAINTEXT_INTERNAL://kafka:9093
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:9093
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -118,12 +118,12 @@ services:
       # Kết nối Kafka nội bộ trong Docker network
       # UPDATE: Dùng port 9093 (internal listener) vì port 9092 được advertise là localhost
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
-      SPARK_MASTER: ${SPARK_MASTER:-spark://${HOST_IP:-192.168.1.7}:7077}
+      SPARK_MASTER: ${SPARK_MASTER:-spark://${HOST_IP:-192.168.80.147}:7077}
       DATABASE_URL: postgresql://${POSTGRES_USER:-faceid}:${POSTGRES_PASSWORD:-faceid123}@postgres:5432/${POSTGRES_DB:-faceid}
       UPLOAD_DIR: /code/app/uploads
       KNOWN_FACES_DIR: /code/app/known_faces
       # MinIO Configuration
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-${HOST_IP:-192.168.1.9}:9000}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-${HOST_IP:-192.168.80.147}:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-face-recognition-data}
@@ -148,7 +148,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: postgresql://${POSTGRES_USER:-faceid}:${POSTGRES_PASSWORD:-faceid123}@postgres:5432/${POSTGRES_DB:-faceid}
       # MinIO Configuration (same as web)
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-${HOST_IP:-192.168.1.9}:9000}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-${HOST_IP:-192.168.80.147}:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-face-recognition-data}

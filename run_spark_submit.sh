@@ -36,7 +36,7 @@ fi
 echo "✅ Using Spark at: $SPARK_HOME"
 
 # Lấy config từ environment hoặc defaults
-HOST_IP=${HOST_IP:-192.168.1.34}
+HOST_IP=${HOST_IP:-192.168.80.147}
 SPARK_MASTER=${SPARK_MASTER:-spark://${HOST_IP}:7077}
 # SPARK_MASTER="local[*]"
 
